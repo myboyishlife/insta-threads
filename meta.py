@@ -35,7 +35,7 @@ class UnifiedSocialMediaUploader:
     def __init__(self):
         self.script_name = "new_s.py"
         self.ist = timezone('Asia/Kolkata')
-        self.account_key = "eclipsed_by_you"
+        self.account_key = "ink-wisps"
 
         # Logging
         logging.basicConfig(
@@ -62,7 +62,7 @@ class UnifiedSocialMediaUploader:
         self.dropbox_key = os.getenv("DROPBOX_APP_KEY")
         self.dropbox_secret = os.getenv("DROPBOX_APP_SECRET")
         self.dropbox_refresh = os.getenv("DROPBOX_REFRESH_TOKEN")
-        self.dropbox_folder = "/ink-wisps"
+        self.dropbox_folder = "/eclipsed_by_you"
 
         if self.telegram_token:
             self.telegram_bot = Bot(token=self.telegram_token)

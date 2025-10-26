@@ -16,6 +16,21 @@ class UnifiedSocialMediaUploader:
     THREADS_API_BASE = "https://graph.threads.net/v1.0"
     INSTAGRAM_REEL_STATUS_RETRIES = 10
     INSTAGRAM_REEL_STATUS_WAIT_TIME = 15
+    
+    # Verification configuration
+    VERIFY_DELAY_INSTAGRAM = 8  # Wait before starting Instagram verification
+    VERIFY_DELAY_FACEBOOK = 4   # Wait before starting Facebook verification
+    VERIFY_DELAY_THREADS = 3    # Wait before starting Threads verification
+    VERIFY_ATTEMPTS = 2         # Max verification attempts (reduced for faster failover)
+    VERIFY_INTERVAL = 5         # Base interval between verification attempts
+    USE_EXPONENTIAL_BACKOFF = False  # Use fixed interval for faster verification
+    
+    # Publish retry configuration (fast failover to avoid hanging)
+    INSTAGRAM_PUBLISH_ATTEMPTS = 3  # Max attempts to publish Instagram post
+    FACEBOOK_PUBLISH_ATTEMPTS = 3   # Max attempts to publish Facebook post
+    THREADS_PUBLISH_ATTEMPTS = 5    # Max attempts to publish Threads post
+    PUBLISH_RETRY_INTERVAL = 5      # Seconds between publish retries
+    PUBLISH_MAX_WAIT_TIME = 30       # Maximum seconds to spend on publishing (for all platforms)
 
     def __init__(self):
         self.script_name = "new_s.py"
@@ -231,7 +246,7 @@ class UnifiedSocialMediaUploader:
         
         return result
 
-    def post_to_instagram(self, dbx, file, caption, page_token):
+    def post_to_instagram(self, dbx, file, caption, page_token, total_files=None):
         """Post to Instagram using the provided page token."""
         name = file.name
         ext = name.lower()
@@ -241,7 +256,8 @@ class UnifiedSocialMediaUploader:
         
         temp_link = dbx.files_get_temporary_link(file.path_lower).link
         file_size = f"{file.size / 1024 / 1024:.2f}MB"
-        total_files = len(self.list_dropbox_files(dbx))
+        if total_files is None:
+            total_files = len(self.list_dropbox_files(dbx))
 
         self.log_console_only(f"📸 Instagram: {media_type} | Size: {file_size} | Remaining: {total_files}")
 
@@ -309,34 +325,59 @@ class UnifiedSocialMediaUploader:
                 self.log_console_only(f"⏳ Waiting {self.INSTAGRAM_REEL_STATUS_WAIT_TIME} seconds...", level=logging.INFO)
                 time.sleep(self.INSTAGRAM_REEL_STATUS_WAIT_TIME)
 
-        # Publish to Instagram
+        # Publish to Instagram with retry logic
         self.log_console_only("📤 Publishing to Instagram...", level=logging.INFO)
         publish_url = f"{self.INSTAGRAM_API_BASE}/{self.ig_id}/media_publish"
         publish_data = {"creation_id": creation_id, "access_token": page_token}
         
-        publish_start = time.time()
-        pub = self.session.post(publish_url, data=publish_data)
-        publish_time = time.time() - publish_start
+        start_time = time.time()
         
-        self.log_console_only(f"⏱️ Publish completed in {publish_time:.2f} seconds", level=logging.INFO)
-        self.log_console_only(f"📊 Publish status: {pub.status_code}", level=logging.INFO)
-        
-        if pub.status_code == 200:
-            response_data = pub.json()
-            instagram_id = response_data.get("id", "Unknown")
-            
-            if not instagram_id:
-                self.send_message("⚠️ Instagram publish succeeded but no media ID returned", level=logging.WARNING, immediate=True)
+        for attempt in range(self.INSTAGRAM_PUBLISH_ATTEMPTS):
+            # Check timeout
+            if time.time() - start_time > self.PUBLISH_MAX_WAIT_TIME:
+                self.send_message(f"❌ Instagram publish timeout after {self.PUBLISH_MAX_WAIT_TIME}s", level=logging.ERROR, immediate=True)
                 return False
+            
+            self.log_console_only(f"🔄 Publish attempt {attempt + 1}/{self.INSTAGRAM_PUBLISH_ATTEMPTS}", level=logging.INFO)
+            
+            pub = self.session.post(publish_url, data=publish_data)
+            
+            self.log_console_only(f"📊 Publish status: {pub.status_code}", level=logging.INFO)
+            
+            if pub.status_code == 200:
+                response_data = pub.json()
+                instagram_id = response_data.get("id", "Unknown")
+                
+                if not instagram_id:
+                    self.send_message("⚠️ Instagram publish succeeded but no media ID returned", level=logging.WARNING, immediate=True)
+                    return False
+                else:
+                    self.send_message(f"✅ Instagram published!\n📸 Media ID: {instagram_id}\n📦 Remaining: {total_files - 1}", immediate=True)
+                    # Verify the post is live
+                    self.verify_instagram_post_by_media_id(instagram_id, page_token)
+                    return True
             else:
-                self.send_message(f"✅ Instagram published!\n📸 Media ID: {instagram_id}\n📦 Remaining: {total_files - 1}", immediate=True)
-                # Verify the post is live
-                self.verify_instagram_post_by_media_id(instagram_id, page_token)
-                return True
-        else:
-            error_msg = pub.json().get("error", {}).get("message", "Unknown error")
-            self.send_message(f"❌ Instagram publish failed: {error_msg}", level=logging.ERROR, immediate=True)
-            return False
+                error_msg = pub.json().get("error", {}).get("message", "Unknown error")
+                error_type = self.classify_error(pub.status_code)
+                
+                # Log error details
+                self.log_console_only(
+                    f"❌ Instagram publish failed (attempt {attempt + 1}/{self.INSTAGRAM_PUBLISH_ATTEMPTS}): {error_msg} (HTTP {pub.status_code}, {error_type})",
+                    level=logging.INFO
+                )
+                
+                # Don't retry permanent errors or if it's the last attempt
+                if error_type == "permanent" or attempt == self.INSTAGRAM_PUBLISH_ATTEMPTS - 1:
+                    self.send_message(f"❌ Instagram publish failed: {error_msg}", level=logging.ERROR, immediate=True)
+                    return False
+                
+                # Wait before retry
+                if attempt < self.INSTAGRAM_PUBLISH_ATTEMPTS - 1:
+                    self.log_console_only(f"⏳ Retrying in {self.PUBLISH_RETRY_INTERVAL}s...", level=logging.INFO)
+                    time.sleep(self.PUBLISH_RETRY_INTERVAL)
+        
+        self.send_message(f"❌ Instagram publish failed after {self.INSTAGRAM_PUBLISH_ATTEMPTS} attempts", level=logging.ERROR, immediate=True)
+        return False
 
     def post_to_facebook_page(self, dbx, file, caption, page_token):
         """Post to Facebook with conditional Reel/Video logic based on orientation requirements."""
@@ -403,7 +444,7 @@ class UnifiedSocialMediaUploader:
             self.send_message(f"❌ Facebook Reels upload failed: {upload_res.text}", level=logging.ERROR, immediate=True)
             return False
         
-        # Step 3: Finish and publish
+        # Step 3: Finish and publish with retry logic
         finish_data = {
             "upload_phase": "finish",
             "access_token": page_token,
@@ -412,20 +453,49 @@ class UnifiedSocialMediaUploader:
             "video_state": "PUBLISHED",
             "share_to_feed": "true"
         }
-        finish_res = self.session.post(start_url, data=finish_data)
         
-        if finish_res.status_code == 200:
-            response_data = finish_res.json()
-            fb_video_id = response_data.get("id", video_id)
-            self.send_message(f"✅ Facebook Reel published!\n📘 Video ID: {fb_video_id}", immediate=True)
-            self.verify_facebook_post_by_video_id(fb_video_id, page_token)
-            return True
-        else:
-            self.send_message(f"❌ Facebook Reels publish failed: {finish_res.text}", level=logging.ERROR, immediate=True)
-            return False
+        start_time = time.time()
+        
+        for attempt in range(self.FACEBOOK_PUBLISH_ATTEMPTS):
+            # Check timeout
+            if time.time() - start_time > self.PUBLISH_MAX_WAIT_TIME:
+                self.send_message(f"❌ Facebook Reel publish timeout after {self.PUBLISH_MAX_WAIT_TIME}s", level=logging.ERROR, immediate=True)
+                return False
+            
+            self.log_console_only(f"🔄 Publish attempt {attempt + 1}/{self.FACEBOOK_PUBLISH_ATTEMPTS}", level=logging.INFO)
+            
+            finish_res = self.session.post(start_url, data=finish_data)
+            
+            if finish_res.status_code == 200:
+                response_data = finish_res.json()
+                fb_video_id = response_data.get("id", video_id)
+                self.send_message(f"✅ Facebook Reel published!\n📘 Video ID: {fb_video_id}", immediate=True)
+                self.verify_facebook_post_by_video_id(fb_video_id, page_token)
+                return True
+            else:
+                error_msg = finish_res.text[:200] if finish_res.text else "Unknown error"
+                error_type = self.classify_error(finish_res.status_code)
+                
+                self.log_console_only(
+                    f"❌ Facebook Reel publish failed (attempt {attempt + 1}/{self.FACEBOOK_PUBLISH_ATTEMPTS}): HTTP {finish_res.status_code} ({error_type})",
+                    level=logging.INFO
+                )
+                
+                # Don't retry permanent errors or if it's the last attempt
+                if error_type == "permanent" or attempt == self.FACEBOOK_PUBLISH_ATTEMPTS - 1:
+                    self.send_message(f"❌ Facebook Reels publish failed: {error_msg}", level=logging.ERROR, immediate=True)
+                    return False
+                
+                # Wait before retry
+                if attempt < self.FACEBOOK_PUBLISH_ATTEMPTS - 1:
+                    self.log_console_only(f"⏳ Retrying in {self.PUBLISH_RETRY_INTERVAL}s...", level=logging.INFO)
+                    time.sleep(self.PUBLISH_RETRY_INTERVAL)
+        
+        self.send_message(f"❌ Facebook Reel publish failed after {self.FACEBOOK_PUBLISH_ATTEMPTS} attempts", level=logging.ERROR, immediate=True)
+        return False
 
     def post_facebook_video(self, file, media_url, caption, page_token):
-        """Post video as regular Facebook video."""
+        """Post video as regular Facebook video with retry logic."""
         self.log_console_only("📘 Starting Facebook Page video upload...", level=logging.INFO)
         
         post_url = f"https://graph.facebook.com/{self.fb_page_id}/videos"
@@ -438,20 +508,47 @@ class UnifiedSocialMediaUploader:
         self.log_console_only(f"📄 Page ID: {self.fb_page_id}", level=logging.INFO)
         self.log_console_only(f"📹 Video URL: {media_url[:50]}...", level=logging.INFO)
         
-        res = self.session.post(post_url, data=data)
+        start_time = time.time()
         
-        self.log_console_only(f"📊 Response status: {res.status_code}", level=logging.INFO)
+        for attempt in range(self.FACEBOOK_PUBLISH_ATTEMPTS):
+            # Check timeout
+            if time.time() - start_time > self.PUBLISH_MAX_WAIT_TIME:
+                self.send_message(f"❌ Facebook video publish timeout after {self.PUBLISH_MAX_WAIT_TIME}s", level=logging.ERROR, immediate=True)
+                return False
+            
+            self.log_console_only(f"🔄 Publish attempt {attempt + 1}/{self.FACEBOOK_PUBLISH_ATTEMPTS}", level=logging.INFO)
+            
+            res = self.session.post(post_url, data=data)
+            
+            self.log_console_only(f"📊 Response status: {res.status_code}", level=logging.INFO)
+            
+            if res.status_code == 200:
+                response_data = res.json()
+                video_id = response_data.get("id", "Unknown")
+                self.send_message(f"✅ Facebook video published!\n📘 Video ID: {video_id}", immediate=True)
+                self.verify_facebook_post_by_video_id(video_id, page_token)
+                return True
+            else:
+                error_msg = res.json().get("error", {}).get("message", "Unknown error")
+                error_type = self.classify_error(res.status_code)
+                
+                self.log_console_only(
+                    f"❌ Facebook video publish failed (attempt {attempt + 1}/{self.FACEBOOK_PUBLISH_ATTEMPTS}): {error_msg} (HTTP {res.status_code}, {error_type})",
+                    level=logging.INFO
+                )
+                
+                # Don't retry permanent errors or if it's the last attempt
+                if error_type == "permanent" or attempt == self.FACEBOOK_PUBLISH_ATTEMPTS - 1:
+                    self.send_message(f"❌ Facebook video upload failed: {error_msg}", level=logging.ERROR, immediate=True)
+                    return False
+                
+                # Wait before retry
+                if attempt < self.FACEBOOK_PUBLISH_ATTEMPTS - 1:
+                    self.log_console_only(f"⏳ Retrying in {self.PUBLISH_RETRY_INTERVAL}s...", level=logging.INFO)
+                    time.sleep(self.PUBLISH_RETRY_INTERVAL)
         
-        if res.status_code == 200:
-            response_data = res.json()
-            video_id = response_data.get("id", "Unknown")
-            self.send_message(f"✅ Facebook video published!\n📘 Video ID: {video_id}", immediate=True)
-            self.verify_facebook_post_by_video_id(video_id, page_token)
-            return True
-        else:
-            error_msg = res.json().get("error", {}).get("message", "Unknown error")
-            self.send_message(f"❌ Facebook video upload failed: {error_msg}", level=logging.ERROR, immediate=True)
-            return False
+        self.send_message(f"❌ Facebook video publish failed after {self.FACEBOOK_PUBLISH_ATTEMPTS} attempts", level=logging.ERROR, immediate=True)
+        return False
 
     def post_facebook_photo(self, file, media_url, caption, page_token):
         """Post image as Facebook photo."""
@@ -475,13 +572,14 @@ class UnifiedSocialMediaUploader:
             self.send_message(f"❌ Facebook photo upload failed: {error_msg}", level=logging.ERROR, immediate=True)
             return False
 
-    def post_to_threads(self, dbx, file, caption):
+    def post_to_threads(self, dbx, file, caption, total_files=None):
         """Post to Threads using the threads access token."""
         name = file.name.lower()
         media_type = "VIDEO" if name.endswith((".mp4", ".mov")) else "IMAGE"
 
         temp_link = dbx.files_get_temporary_link(file.path_lower).link
-        total_files = len(self.list_dropbox_files(dbx))
+        if total_files is None:
+            total_files = len(self.list_dropbox_files(dbx))
 
         self.send_message(f"🚀 Uploading to Threads: {file.name}\n📐 Type: {media_type}\n📦 Remaining: {total_files}", immediate=True)
 
@@ -539,33 +637,49 @@ class UnifiedSocialMediaUploader:
                 
                 time.sleep(4)
             
-            # Step 3: Publish
+            # Step 3: Publish with retry logic
             publish_url = f"{self.THREADS_API_BASE}/{self.threads_user_id}/threads_publish"
             publish_data = {
                 "access_token": self.threads_access_token,
                 "creation_id": creation_id
             }
             
-            max_wait = 180
-            interval = 5
             start_time = time.time()
             
-            while True:
+            for attempt in range(self.THREADS_PUBLISH_ATTEMPTS):
+                # Check timeout
+                if time.time() - start_time > self.PUBLISH_MAX_WAIT_TIME:
+                    self.send_message(f"❌ Threads publish timeout after {self.PUBLISH_MAX_WAIT_TIME}s", level=logging.ERROR, immediate=True)
+                    return False
+                
+                self.log_console_only(f"🔄 Publish attempt {attempt + 1}/{self.THREADS_PUBLISH_ATTEMPTS}", level=logging.INFO)
+                
                 pub_res = self.session.post(publish_url, data=publish_data)
+                
                 if pub_res.status_code == 200:
                     thread_id = pub_res.json().get('id', 'Unknown')
                     self.send_message(f"✅ Threads post published! ID: {thread_id}", immediate=True)
                     return thread_id  # Return ID for verification
                 else:
                     error_msg = pub_res.json().get("error", {}).get("message", "Unknown error")
-                    self.send_message(f"❌ Threads publish failed: {error_msg}. Retrying...", level=logging.ERROR, immediate=True)
+                    error_type = self.classify_error(pub_res.status_code)
                     
-                    if time.time() - start_time > max_wait:
-                        self.send_message(f"❌ Threads publish failed after {max_wait} seconds", level=logging.ERROR, immediate=True)
+                    self.log_console_only(
+                        f"❌ Threads publish failed (attempt {attempt + 1}/{self.THREADS_PUBLISH_ATTEMPTS}): {error_msg} (HTTP {pub_res.status_code}, {error_type})",
+                        level=logging.INFO
+                    )
+                    
+                    # Don't retry permanent errors or if it's the last attempt
+                    if error_type == "permanent" or attempt == self.THREADS_PUBLISH_ATTEMPTS - 1:
+                        self.send_message(f"❌ Threads publish failed: {error_msg}", level=logging.ERROR, immediate=True)
                         return False
                     
-                    time.sleep(interval)
+                    # Wait before retry
+                    if attempt < self.THREADS_PUBLISH_ATTEMPTS - 1:
+                        self.log_console_only(f"⏳ Retrying in {self.PUBLISH_RETRY_INTERVAL}s...", level=logging.INFO)
+                        time.sleep(self.PUBLISH_RETRY_INTERVAL)
             
+            self.send_message(f"❌ Threads publish failed after {self.THREADS_PUBLISH_ATTEMPTS} attempts", level=logging.ERROR, immediate=True)
             return False
         else:
             # Text-only post
@@ -584,109 +698,171 @@ class UnifiedSocialMediaUploader:
         match = re.search(r"#(\w+)", text)
         return match.group(1) if match else None
 
-    def verify_instagram_post_by_media_id(self, media_id, page_token):
-        """Verify Instagram post is live by polling the published media_id."""
+    def classify_error(self, status_code):
+        """
+        Classify error types to determine retry behavior.
+        
+        Args:
+            status_code: HTTP status code
+            
+        Returns:
+            str: Error type ('permanent', 'rate_limit', 'transient', 'unknown')
+        """
+        if status_code in (400, 403, 404):
+            return "permanent"  # Don't retry
+        elif status_code == 429:
+            return "rate_limit"  # Retry after longer delay
+        elif 500 <= status_code < 600:
+            return "transient"  # Retry normally
+        else:
+            return "unknown"  # Retry normally
+
+    def unified_verify_post(self, platform_name, check_fn, initial_delay=0):
+        """
+        Unified verification logic for all platforms with smart error handling.
+        
+        Args:
+            platform_name: Name of the platform (Instagram, Facebook, Threads)
+            check_fn: Function that returns (success: bool, status_code: int, message: str)
+            initial_delay: Delay before starting verification
+        """
         try:
-            self.log_console_only("🔍 Verifying Instagram post is live...", level=logging.INFO)
+            self.log_console_only(f"🔍 Verifying {platform_name} post is live...", level=logging.INFO)
             
-            url = f"{self.INSTAGRAM_API_BASE}/{media_id}"
-            params = {
-                "fields": "id,permalink_url,media_type,media_url,thumbnail_url,created_time",
-                "access_token": page_token
-            }
+            # Initial delay for post indexing
+            if initial_delay > 0:
+                self.log_console_only(f"⏳ Waiting {initial_delay} seconds for post to be indexed...", level=logging.INFO)
+                time.sleep(initial_delay)
             
-            for attempt in range(10):
-                self.log_console_only(f"🔄 Verification attempt {attempt + 1}/10", level=logging.INFO)
+            for attempt in range(self.VERIFY_ATTEMPTS):
+                self.log_console_only(f"🔄 Verification attempt {attempt + 1}/{self.VERIFY_ATTEMPTS}", level=logging.INFO)
                 
-                res = self.session.get(url, params=params)
-                if res.status_code == 200:
-                    post_data = res.json()
-                    permalink = post_data.get("permalink_url", "Not available")
-                    self.log_console_only(f"✅ Instagram post verified as live!\n🔗 {permalink}", level=logging.INFO)
+                success, status_code, message = check_fn()
+                
+                if success:
+                    self.log_console_only(f"✅ {platform_name} post verified as live!\n{message}", level=logging.INFO)
                     return True
-                elif res.status_code == 400:
-                    self.log_console_only(f"❌ Unrecoverable error: {res.status_code}", level=logging.INFO)
-                    break
-                else:
-                    self.log_console_only(f"❌ Verification failed: {res.status_code}", level=logging.INFO)
-                    if attempt < 9:
-                        time.sleep(5)
+                
+                # Classify error to determine retry behavior
+                error_type = self.classify_error(status_code)
+                
+                # Log error details with truncated message
+                error_preview = (message[:150] + "...") if len(str(message)) > 150 else message
+                self.log_console_only(
+                    f"❌ {platform_name} verification failed: HTTP {status_code} ({error_type})\n"
+                    f"   Error: {error_preview}",
+                    level=logging.INFO
+                )
+                
+                # Smart retry logic based on error type
+                if error_type == "permanent":
+                    self.log_console_only(
+                        f"⚠️ Permanent error (HTTP {status_code}). Stopping verification.",
+                        level=logging.WARNING
+                    )
+                    break  # Don't retry permanent errors
+                elif error_type == "rate_limit":
+                    wait_time = 30  # Longer wait for rate limits
+                    self.log_console_only(
+                        f"⏳ Rate limit detected. Waiting {wait_time}s before retry...",
+                        level=logging.INFO
+                    )
+                    if attempt < self.VERIFY_ATTEMPTS - 1:
+                        time.sleep(wait_time)
+                elif error_type in ("transient", "unknown"):
+                    # Normal retry with interval
+                    if attempt < self.VERIFY_ATTEMPTS - 1:
+                        if self.USE_EXPONENTIAL_BACKOFF:
+                            backoff_time = self.VERIFY_INTERVAL * (attempt + 1)
+                        else:
+                            backoff_time = self.VERIFY_INTERVAL
+                        self.log_console_only(
+                            f"⏳ Retrying in {backoff_time}s...",
+                            level=logging.INFO
+                        )
+                        time.sleep(backoff_time)
             
-            self.send_message("⚠️ Could not verify Instagram post is live after 10 attempts", level=logging.WARNING)
+            self.send_message(
+                f"⚠️ Could not verify {platform_name} post is live after {attempt + 1} attempts",
+                level=logging.WARNING
+            )
             return False
             
         except Exception as e:
-            self.send_message(f"❌ Exception verifying Instagram post: {e}", level=logging.ERROR)
+            self.send_message(f"❌ Exception verifying {platform_name} post: {e}", level=logging.ERROR)
             return False
+
+    def verify_instagram_post_by_media_id(self, media_id, page_token):
+        """Verify Instagram post is live by polling the published media_id."""
+        url = f"{self.INSTAGRAM_API_BASE}/{media_id}"
+        params = {
+            "fields": "id,permalink_url,media_type,media_url,thumbnail_url,created_time",
+            "access_token": page_token
+        }
+        
+        def check_post():
+            res = self.session.get(url, params=params)
+            if res.status_code == 200:
+                post_data = res.json()
+                permalink = post_data.get("permalink_url", "Not available")
+                return True, res.status_code, f"🔗 {permalink}"
+            else:
+                # Try to extract error message from response
+                try:
+                    error_data = res.json()
+                    error_msg = error_data.get("error", {}).get("message", res.text[:200])
+                except:
+                    error_msg = res.text[:200] if res.text else "No error message"
+                return False, res.status_code, error_msg
+        
+        return self.unified_verify_post("Instagram", check_post, self.VERIFY_DELAY_INSTAGRAM)
 
     def verify_facebook_post_by_video_id(self, video_id, page_token):
         """Verify Facebook video post is live by polling the video_id."""
-        try:
-            self.log_console_only("🔍 Verifying Facebook post is live...", level=logging.INFO)
-            
-            url = f"https://graph.facebook.com/{video_id}"
-            params = {
-                "fields": "id,permalink_url,created_time,length,title,description",
-                "access_token": page_token
-            }
-            
-            for attempt in range(10):
-                self.log_console_only(f"🔄 Verification attempt {attempt + 1}/10", level=logging.INFO)
-                
-                res = self.session.get(url, params=params)
-                if res.status_code == 200:
-                    post_data = res.json()
-                    permalink = post_data.get("permalink_url", "Not available")
-                    self.log_console_only(f"✅ Facebook post verified as live!\n🔗 {permalink}", level=logging.INFO)
-                    return True
-                elif res.status_code == 400:
-                    self.log_console_only(f"❌ Unrecoverable error: {res.status_code}", level=logging.INFO)
-                    break
-                else:
-                    self.log_console_only(f"❌ Verification failed: {res.status_code}", level=logging.INFO)
-                    if attempt < 9:
-                        time.sleep(5)
-            
-            self.send_message("⚠️ Could not verify Facebook post is live after 10 attempts", level=logging.WARNING)
-            return False
-            
-        except Exception as e:
-            self.send_message(f"❌ Exception verifying Facebook post: {e}", level=logging.ERROR)
-            return False
+        url = f"https://graph.facebook.com/{video_id}"
+        params = {
+            "fields": "id,permalink_url,created_time,length,title,description",
+            "access_token": page_token
+        }
+        
+        def check_post():
+            res = self.session.get(url, params=params)
+            if res.status_code == 200:
+                post_data = res.json()
+                permalink = post_data.get("permalink_url", "Not available")
+                return True, res.status_code, f"🔗 {permalink}"
+            else:
+                # Try to extract error message from response
+                try:
+                    error_data = res.json()
+                    error_msg = error_data.get("error", {}).get("message", res.text[:200])
+                except:
+                    error_msg = res.text[:200] if res.text else "No error message"
+                return False, res.status_code, error_msg
+        
+        return self.unified_verify_post("Facebook", check_post, self.VERIFY_DELAY_FACEBOOK)
 
     def verify_threads_post(self, thread_id):
         """Verify Threads post is live by polling the thread_id."""
-        try:
-            self.log_console_only("🔍 Verifying Threads post is live...", level=logging.INFO)
-            
-            url = f"{self.THREADS_API_BASE}/{thread_id}"
-            params = {
-                "access_token": self.threads_access_token
-            }
-            
-            for attempt in range(10):
-                self.log_console_only(f"🔄 Verification attempt {attempt + 1}/10", level=logging.INFO)
-                
-                res = self.session.get(url, params=params)
-                if res.status_code == 200:
-                    post_data = res.json()
-                    # Threads API returns post data if successful
-                    self.log_console_only(f"✅ Threads post verified as live!\n📄 Thread ID: {thread_id}", level=logging.INFO)
-                    return True
-                elif res.status_code == 400:
-                    self.log_console_only(f"❌ Unrecoverable error: {res.status_code}", level=logging.INFO)
-                    break
-                else:
-                    self.log_console_only(f"❌ Verification failed: {res.status_code}", level=logging.INFO)
-                    if attempt < 9:
-                        time.sleep(5)
-            
-            self.send_message("⚠️ Could not verify Threads post is live after 10 attempts", level=logging.WARNING)
-            return False
-            
-        except Exception as e:
-            self.send_message(f"❌ Exception verifying Threads post: {e}", level=logging.ERROR)
-            return False
+        url = f"{self.THREADS_API_BASE}/{thread_id}"
+        params = {
+            "access_token": self.threads_access_token
+        }
+        
+        def check_post():
+            res = self.session.get(url, params=params)
+            if res.status_code == 200:
+                return True, res.status_code, f"📄 Thread ID: {thread_id}"
+            else:
+                # Try to extract error message from response
+                try:
+                    error_data = res.json()
+                    error_msg = error_data.get("error", {}).get("message", res.text[:200])
+                except:
+                    error_msg = res.text[:200] if res.text else "No error message"
+                return False, res.status_code, error_msg
+        
+        return self.unified_verify_post("Threads", check_post, self.VERIFY_DELAY_THREADS)
 
     def check_token_expiry(self):
         """Check Meta token expiry and validate before starting."""
@@ -776,6 +952,7 @@ class UnifiedSocialMediaUploader:
 
     def process_file(self, dbx):
         """Process a single file and post to all platforms."""
+        # Cache files list to avoid redundant API calls
         files = self.list_dropbox_files(dbx)
         if not files:
             self.log_console_only("📭 No files found in Dropbox folder.", level=logging.INFO)
@@ -783,6 +960,7 @@ class UnifiedSocialMediaUploader:
 
         # Pick random file
         file = random.choice(files)
+        total_files = len(files)  # Cache total files count
         self.log_console_only(f"🎯 Processing: {file.name}", level=logging.INFO)
         
         # Build caption from filename for all platforms
@@ -808,13 +986,13 @@ class UnifiedSocialMediaUploader:
                     results['instagram'] = False
                 else:
                     # Post to Instagram
-                    results['instagram'] = self.post_to_instagram(dbx, file, caption, page_token)
+                    results['instagram'] = self.post_to_instagram(dbx, file, caption, page_token, total_files)
                 
                 # Post to Facebook
                 results['facebook'] = self.post_to_facebook_page(dbx, file, caption, page_token)
             
             # Post to Threads
-            thread_id = self.post_to_threads(dbx, file, caption)
+            thread_id = self.post_to_threads(dbx, file, caption, total_files)
             if thread_id and thread_id != 'Unknown':
                 results['threads'] = True
                 # Verify Threads post is live
@@ -832,7 +1010,16 @@ class UnifiedSocialMediaUploader:
         except Exception as e:
             self.log_console_only(f"⚠️ Failed to delete: {e}", level=logging.WARNING)
         
-        # Report results
+        # Report results with detailed summary
+        summary_lines = [
+            f"📊 Posting Summary:",
+            f"   Instagram: {'✅ Success' if results['instagram'] else '❌ Failed'}",
+            f"   Facebook:  {'✅ Success' if results['facebook'] else '❌ Failed'}",
+            f"   Threads:   {'✅ Success' if results['threads'] else '❌ Failed'}"
+        ]
+        self.send_message("\n".join(summary_lines), immediate=True)
+        
+        # Also send simplified status
         status_report = []
         if results['instagram']:
             status_report.append("Instagram ✅")
@@ -849,7 +1036,7 @@ class UnifiedSocialMediaUploader:
         else:
             status_report.append("Threads ❌")
         
-        self.send_message(f"📊 Final Status:\n" + " | ".join(status_report), immediate=True)
+        self.log_console_only(f"📊 Final Status: {' | '.join(status_report)}")
         
         return any(results.values())  # Return True if any platform succeeded
 
@@ -886,3 +1073,4 @@ class UnifiedSocialMediaUploader:
 
 if __name__ == "__main__":
     UnifiedSocialMediaUploader().run()
+

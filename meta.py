@@ -268,7 +268,7 @@ class UnifiedSocialMediaUploader:
         }
 
         if media_type == "REELS":
-            data.update({"media_type": "REELS", "video_url": temp_link, "share_to_feed": "false"})
+            data.update({"media_type": "REELS", "video_url": temp_link, "share_to_feed": "true"})
         else:
             data["image_url"] = temp_link
 

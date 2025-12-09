@@ -178,26 +178,28 @@ class UnifiedSocialMediaUploader:
                 'max_words': 400,
                 'max_chars': 2000,  # Instagram's hard limit is 2,000 characters
                 'hashtag_count': '5-10',
-                'prompt': f"""Write a Facebook-style Instagram caption (≤2,000 characters, about 400 words) for '{filename}'.
+                'prompt': f"""Write a Facebook-style Instagram caption (≤2,000 characters, about 400 words) for '{filename}' with clear paragraphs and emojis.
 
 Requirements:
 - Friendly, conversational storytelling (like a Facebook post)
+- Use MULTIPLE short paragraphs with blank lines between them (do NOT make one big block)
 - Start with a strong hook opening the story naturally
 - Tell a descriptive, emotional story fully related to the filename
 - Add value/insight and relatable details
-- Sprinkle emojis naturally (not all at the end)
+- Sprinkle emojis naturally in each paragraph (not all at the end)
 - End with exactly 5-10 topic-specific, non-generic hashtags
 - Finish with a call-to-action question to drive comments (e.g., "What would you do?", "Share your thoughts below")
 - Everything must stay under 2,000 characters including spaces/emojis/hashtags
 
 Flow to follow (do NOT label the sections, just write the caption):
 - Hooky first line that makes people keep reading
-- Descriptive story that provides context (what happened, who, where) with emotional, relatable details
+- 3–5 short paragraphs, each with 2–4 sentences, separated by blank lines
+- Descriptive story with context (what happened, who, where) plus emotional, relatable details
 - Engagement element with a question that invites replies
 - Call-to-action question at the end
 - Hashtags at the very end (5-10, all tightly related to the filename/topic; no generic tags)
 
-Generate only the caption text (no section labels, no extra notes). Keep it concise, under 2,000 characters total, and fully tied to the filename topic."""
+Generate only the caption text (no section labels, no extra notes). Keep it under 2,000 characters total, clearly paragraph-separated, and fully tied to the filename topic."""
             },
             'facebook': {
                 'max_words': 1000,

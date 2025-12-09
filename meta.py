@@ -695,6 +695,42 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                 
                 self.log_console_only(f"⏳ Waiting {self.INSTAGRAM_REEL_STATUS_WAIT_TIME} seconds...", level=logging.INFO)
                 time.sleep(self.INSTAGRAM_REEL_STATUS_WAIT_TIME)
+        else:
+            # For IMAGES, check status and wait a bit before publishing
+            self.log_console_only("⏳ Verifying image container is ready...", level=logging.INFO)
+            time.sleep(3)  # Small delay for image processing
+            
+            # Check container status before publishing
+            for check_attempt in range(3):
+                status_response = self.session.get(
+                    f"{self.INSTAGRAM_API_BASE}/{creation_id}?fields=status_code&access_token={page_token}"
+                )
+                
+                if status_response.status_code == 200:
+                    status = status_response.json()
+                    current_status = status.get("status_code", "UNKNOWN")
+                    self.log_console_only(f"📊 Image container status: {current_status}", level=logging.INFO)
+                    
+                    if current_status == "FINISHED":
+                        self.log_console_only("✅ Image container ready for publishing", level=logging.INFO)
+                        break
+                    elif current_status == "ERROR":
+                        self.send_message(f"❌ Instagram image container error: {name}", level=logging.ERROR, immediate=True)
+                        return False
+                    elif current_status == "IN_PROGRESS":
+                        if check_attempt < 2:
+                            self.log_console_only("⏳ Image still processing, waiting 2 seconds...", level=logging.INFO)
+                            time.sleep(2)
+                            continue
+                
+                # If status check fails, log but continue (some containers don't return status)
+                if check_attempt == 0:
+                    self.log_console_only("⚠️ Could not check container status, proceeding with publish...", level=logging.WARNING)
+                    break
+            
+            # Additional wait before publishing images
+            self.log_console_only("⏳ Waiting 2 seconds before publishing image...", level=logging.INFO)
+            time.sleep(2)
 
         # Publish to Instagram with retry logic
         self.log_console_only("📤 Publishing to Instagram...", level=logging.INFO)
@@ -728,14 +764,45 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                     self.verify_instagram_post_by_media_id(instagram_id, page_token)
                     return True
             else:
-                error_msg = pub.json().get("error", {}).get("message", "Unknown error")
+                error_data = pub.json().get("error", {})
+                error_msg = error_data.get("message", "Unknown error")
+                error_code = error_data.get("code", "Unknown")
                 error_type = self.classify_error(pub.status_code)
                 
                 # Log error details
                 self.log_console_only(
-                    f"❌ Instagram publish failed (attempt {attempt + 1}/{self.INSTAGRAM_PUBLISH_ATTEMPTS}): {error_msg} (HTTP {pub.status_code}, {error_type})",
+                    f"❌ Instagram publish failed (attempt {attempt + 1}/{self.INSTAGRAM_PUBLISH_ATTEMPTS}): {error_msg} (HTTP {pub.status_code}, Code: {error_code}, Type: {error_type})",
                     level=logging.INFO
                 )
+                
+                # Special handling for "Media ID is not available" error
+                if "Media ID is not available" in error_msg or "not available" in error_msg.lower():
+                    self.log_console_only("⚠️ Media ID not available - container may not be ready yet", level=logging.WARNING)
+                    
+                    # Check container status before retrying
+                    if attempt < self.INSTAGRAM_PUBLISH_ATTEMPTS - 1:
+                        self.log_console_only("🔍 Checking container status before retry...", level=logging.INFO)
+                        status_check = self.session.get(
+                            f"{self.INSTAGRAM_API_BASE}/{creation_id}?fields=status_code&access_token={page_token}"
+                        )
+                        
+                        if status_check.status_code == 200:
+                            status_data = status_check.json()
+                            container_status = status_data.get("status_code", "UNKNOWN")
+                            self.log_console_only(f"📊 Container status: {container_status}", level=logging.INFO)
+                            
+                            if container_status == "ERROR":
+                                self.send_message(f"❌ Instagram container error: {name}", level=logging.ERROR, immediate=True)
+                                return False
+                            elif container_status == "IN_PROGRESS":
+                                self.log_console_only("⏳ Container still processing, waiting longer...", level=logging.INFO)
+                                time.sleep(10)  # Wait longer if still processing
+                            else:
+                                time.sleep(5)  # Wait before retry
+                        else:
+                            self.log_console_only("⚠️ Could not check container status, waiting before retry...", level=logging.WARNING)
+                            time.sleep(8)  # Wait longer if status check fails
+                        continue
                 
                 # Don't retry permanent errors or if it's the last attempt
                 if error_type == "permanent" or attempt == self.INSTAGRAM_PUBLISH_ATTEMPTS - 1:

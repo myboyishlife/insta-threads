@@ -178,52 +178,83 @@ class UnifiedSocialMediaUploader:
                 'max_words': 500,
                 'max_chars': 3000,  # ~500 words * 6 chars per word
                 'hashtag_count': '5-10',
-                'prompt': f"""Generate an engaging Instagram caption for content titled '{filename}'.
+                'prompt': f"""Generate a highly engaging, viral-worthy Instagram caption for content titled '{filename}' that maximizes engagement and reach.
 
-Requirements:
-- Make it descriptive, exciting, and engaging
-- Add relevant emojis throughout
-- Maximum 500 words (approximately 3000 characters)
-- End with 5-10 relevant trending hashtags based on the content topic
-- Focus on trends, excitement, and visual appeal
+CRITICAL REQUIREMENTS:
+- Maximum 500 words (approximately 3000 characters total including hashtags)
+- End with exactly 5-10 relevant trending hashtags
+- Add emojis strategically throughout the caption (not just at the end)
 - Write in a conversational, engaging style
-- Do not exceed the word or character limit
 
-Generate only the caption text, nothing else."""
+CONTENT STRATEGIES (use multiple):
+1. MOTIVATIONAL CONTENT: Include inspiring, uplifting messages that motivate and empower
+2. EMOTIONAL STORYTELLING: Create an emotional narrative that connects with the audience
+3. COMMENT BAIT QUESTIONS: Add thought-provoking questions that encourage comments (e.g., "What do you think?", "Have you experienced this?", "Drop a ❤️ if you agree")
+4. CONTROVERSY: Include mildly controversial or debatable points that spark discussion (keep it respectful)
+5. VIRAL MORAL DILEMMA: Present a moral question or dilemma that makes people think and share their opinions
+6. TREND JACKING: Reference current trends, memes, or popular topics when relevant
+7. LONG READ CAPTION: Make it substantial and valuable - people love detailed, informative captions
+8. ENGAGEMENT HOOKS: Use phrases like "Save this post", "Share with someone who needs this", "Double tap if..."
+
+STRUCTURE:
+- Start with a strong hook (first line should grab attention)
+- Build emotional connection through storytelling
+- Add motivational/empowering message
+- Include engagement questions
+- Add emojis throughout (not just at end)
+- End with 5-10 trending hashtags
+
+Generate only the caption text, nothing else. Make it compelling and shareable."""
             },
             'facebook': {
                 'max_words': 1000,
                 'max_chars': 6000,  # ~1000 words * 6 chars per word
-                'hashtag_count': '5-8',
-                'prompt': f"""Create a detailed Facebook post caption for content titled '{filename}'.
+                'hashtag_count': '5-10',
+                'prompt': f"""Create a detailed, engaging Facebook post caption for content titled '{filename}' that encourages shares and comments.
 
-Requirements:
+CRITICAL REQUIREMENTS:
+- Maximum 1000 words (approximately 6000 characters total including hashtags)
+- End with exactly 5-10 targeted hashtags based on the content topic
 - Use storytelling style with engaging narrative
 - Include questions to encourage engagement
-- Maximum 1000 words (approximately 6000 characters)
-- Add 5-8 targeted hashtags at the end based on the content topic
-- Make it informative and shareable
+- Add emojis strategically throughout
+- Make it informative, shareable, and valuable
 - Write in a friendly, conversational tone
 - Do not exceed the word or character limit
+
+CONTENT STRATEGIES:
+- Emotional storytelling that connects with the audience
+- Include thought-provoking questions
+- Add value through insights, tips, or information
+- Use engagement hooks to encourage shares and comments
+- Reference relatable experiences
 
 Generate only the caption text, nothing else."""
             },
             'threads': {
-                'max_words': 300,
-                'max_chars': 1500,  # ~300 words * 5 chars per word
-                'hashtag_count': '3-5',
-                'prompt': f"""Write a concise Threads post for content titled '{filename}'.
+                'max_words': 80,  # Reduced to ensure under 500 chars
+                'max_chars': 450,  # Strictly under 500 to avoid API error
+                'hashtag_count': '1-2',
+                'prompt': f"""Write a concise, punchy Threads post for content titled '{filename}'.
 
-Requirements:
-- Start with a strong hook to grab attention
-- Keep it conversational and engaging
-- Maximum 300 words (approximately 1500 characters)
-- Include 3-5 trending hashtags based on the topic
-- Make it punchy and shareable
+CRITICAL REQUIREMENTS:
+- ABSOLUTE MAXIMUM: 450 characters total (including hashtags and spaces)
+- MUST be under 500 characters - this is a hard limit
+- Include exactly 1-2 trending hashtags at the end
+- Start with a strong hook to grab attention immediately
+- Keep it conversational, engaging, and shareable
 - Write in a casual, friendly tone
-- Do not exceed the word or character limit
+- Make it punchy and viral-worthy
+- Add 1-2 emojis if they fit naturally
 
-Generate only the caption text, nothing else."""
+STRUCTURE:
+- Hook (first line grabs attention)
+- Main message (concise and impactful)
+- 1-2 hashtags at the end
+
+IMPORTANT: Count characters carefully. The total must be UNDER 500 characters including all spaces, punctuation, and hashtags.
+
+Generate only the caption text, nothing else. Keep it short and powerful."""
             }
         }
         
@@ -249,11 +280,19 @@ Generate only the caption text, nothing else."""
                     for model_name in models_to_try:
                         try:
                             self.log_console_only(f"🔄 Trying model: {model_name}", level=logging.INFO)
+                            # Adjust max_tokens based on platform
+                            if platform == 'threads':
+                                max_tokens = 200  # Lower for Threads (shorter content)
+                            elif platform == 'facebook':
+                                max_tokens = 4000  # Higher for Facebook (longer content)
+                            else:
+                                max_tokens = 3000  # Instagram
+                            
                             response = groq_client.chat.completions.create(
                                 model=model_name,
                                 messages=[{"role": "user", "content": config['prompt']}],
                                 temperature=0.7,
-                                max_tokens=3000  # Increased for longer captions
+                                max_tokens=max_tokens
                             )
                             self.log_console_only(f"✅ Successfully used model: {model_name}", level=logging.INFO)
                             break  # Success, exit loop
@@ -287,15 +326,43 @@ Generate only the caption text, nothing else."""
                     if caption.startswith("'") and caption.endswith("'"):
                         caption = caption[1:-1]
                     
-                    # Truncate if over character limit (safety check)
-                    if len(caption) > config['max_chars']:
-                        # Try to truncate at a word boundary near the limit
+                    # Strict character limit enforcement (especially for Threads)
+                    if platform == 'threads':
+                        # Threads has strict 500 character limit - be very conservative
+                        max_allowed = 450  # Leave buffer for safety
+                        if len(caption) > max_allowed:
+                            # Truncate at word boundary
+                            truncated = caption[:max_allowed-10]
+                            last_space = truncated.rfind(' ')
+                            last_hashtag = truncated.rfind('#')
+                            
+                            # Try to preserve hashtags if they're near the end
+                            if last_hashtag > last_space and last_hashtag > max_allowed - 50:
+                                # Keep hashtags, truncate before them
+                                caption = truncated[:last_hashtag].rstrip() + " " + caption[last_hashtag:max_allowed].rstrip()
+                            elif last_space > 0:
+                                caption = truncated[:last_space].rstrip()
+                            else:
+                                caption = truncated.rstrip()
+                            
+                            # Final safety check - must be under 500
+                            if len(caption) >= 500:
+                                caption = caption[:495].rstrip()
+                            
+                            self.log_console_only(f"⚠️ Threads caption truncated to {len(caption)} chars (limit: 500)", level=logging.WARNING)
+                    elif len(caption) > config['max_chars']:
+                        # For other platforms, truncate at word boundary
                         truncated = caption[:config['max_chars']-50]
                         last_space = truncated.rfind(' ')
                         if last_space > 0:
                             caption = truncated[:last_space] + "..."
                         else:
                             caption = truncated + "..."
+                    
+                    # Final validation for Threads - must be under 500
+                    if platform == 'threads' and len(caption) >= 500:
+                        self.log_console_only(f"⚠️ Threads caption still too long ({len(caption)} chars), forcing truncation", level=logging.WARNING)
+                        caption = caption[:495].rstrip()
                     
                     captions[platform] = caption
                     
@@ -320,10 +387,37 @@ Generate only the caption text, nothing else."""
         
         # Final validation - check if we got any AI-generated captions
         ai_generated_count = sum(1 for cap in captions.values() if cap != self.build_caption_from_filename(file))
+        
+        # CRITICAL: Final validation for Threads character limit
+        if 'threads' in captions:
+            threads_caption = captions['threads']
+            if len(threads_caption) >= 500:
+                self.log_console_only(f"⚠️ CRITICAL: Threads caption exceeds limit ({len(threads_caption)} chars). Forcing truncation.", level=logging.ERROR)
+                # Aggressively truncate
+                threads_caption = threads_caption[:450].rstrip()
+                # Try to preserve hashtags if they exist
+                last_hashtag = threads_caption.rfind('#')
+                if last_hashtag > 400:
+                    # Hashtags are near the end, keep them
+                    main_text = threads_caption[:last_hashtag].rstrip()
+                    hashtags = threads_caption[last_hashtag:]
+                    if len(main_text) + len(hashtags) < 500:
+                        captions['threads'] = main_text + " " + hashtags
+                    else:
+                        captions['threads'] = threads_caption[:495].rstrip()
+                else:
+                    captions['threads'] = threads_caption[:495].rstrip()
+                
+                self.log_console_only(f"✅ Threads caption fixed: {len(captions['threads'])} chars", level=logging.INFO)
+        
         if ai_generated_count == 0:
             self.send_message("⚠️ No AI captions generated. All platforms using fallback captions.", level=logging.WARNING, immediate=True)
         else:
-            self.send_message(f"✅ Successfully generated {ai_generated_count}/3 AI captions", level=logging.INFO, immediate=True)
+            # Log character counts for all platforms
+            char_counts = []
+            for platform, caption in captions.items():
+                char_counts.append(f"{platform}: {len(caption)} chars")
+            self.send_message(f"✅ Successfully generated {ai_generated_count}/3 AI captions\n{' | '.join(char_counts)}", level=logging.INFO, immediate=True)
         
         return captions
 

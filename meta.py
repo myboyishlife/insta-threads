@@ -175,10 +175,10 @@ class UnifiedSocialMediaUploader:
         
         platforms = {
             'instagram': {
-                'max_words': 400,
-                'max_chars': 2000,  # Instagram's hard limit is 2,000 characters
+                'max_words': 360,
+                'max_chars': 1800,  # Instagram target cap: 1,800 characters
                 'hashtag_count': '5-10',
-                'prompt': f"""Write a Facebook-style Instagram caption (≤2,000 characters, about 400 words) for '{filename}' with clear paragraphs and emojis.
+                'prompt': f"""Write a Facebook-style Instagram caption (≤1,800 characters, about 350-360 words) for '{filename}' with clear paragraphs and emojis. Mix motivational + emotional in a positive way that gives hope.
 
 Requirements:
 - Friendly, conversational storytelling (like a Facebook post)
@@ -189,7 +189,8 @@ Requirements:
 - Sprinkle emojis naturally in each paragraph (not all at the end)
 - End with exactly 5-10 topic-specific, non-generic hashtags
 - Finish with a call-to-action question to drive comments (e.g., "What would you do?", "Share your thoughts below")
-- Everything must stay under 2,000 characters including spaces/emojis/hashtags
+- Everything must stay under 1,800 characters including spaces/emojis/hashtags
+- Tone: motivational + emotional + hopeful
 
 Flow to follow (do NOT label the sections, just write the caption):
 - Hooky first line that makes people keep reading
@@ -202,40 +203,40 @@ Flow to follow (do NOT label the sections, just write the caption):
 Generate only the caption text (no section labels, no extra notes). Keep it under 2,000 characters total, clearly paragraph-separated, and fully tied to the filename topic."""
             },
             'facebook': {
-                'max_words': 1000,
-                'max_chars': 6000,  # ~1000 words * 6 chars per word
+                'max_words': 380,
+                'max_chars': 2000,  # Facebook target cap: 2,000 characters
                 'hashtag_count': '5-10',
-                'prompt': f"""Create a detailed, engaging Facebook post caption for content titled '{filename}' that encourages shares and comments.
+                'prompt': f"""Create a detailed, engaging Facebook-style caption for '{filename}' that encourages shares and comments, in multiple short paragraphs with emojis. Mix motivational + emotional in a positive, hopeful way.
 
 CRITICAL REQUIREMENTS:
-- Maximum 1000 words (approximately 6000 characters total including hashtags)
-- End with exactly 5-10 targeted hashtags based on the content topic
+- Maximum 2,000 characters total (including hashtags)
+- Aim ~380 words (but stay under 2,000 chars)
+- End with exactly 5-10 targeted, topic-specific hashtags (no generic tags)
 - Use storytelling style with engaging narrative
 - Include questions to encourage engagement
-- Add emojis strategically throughout
+- Add emojis strategically throughout paragraphs
 - Make it informative, shareable, and valuable
 - Write in a friendly, conversational tone
-- Do not exceed the word or character limit
+- Do not exceed the character limit
 
-CONTENT STRATEGIES:
-- Emotional storytelling that connects with the audience
-- Include thought-provoking questions
-- Add value through insights, tips, or information
-- Use engagement hooks to encourage shares and comments
-- Reference relatable experiences
+STRUCTURE (no labels, just text):
+- Hooky first line
+- 3–5 short paragraphs, 2–4 sentences each, separated by blank lines
+- Emotional storytelling + relatable details
+- Engagement questions + call to action at the end
+- Hashtags last (5-10, topic-specific)
 
-Generate only the caption text, nothing else."""
+Generate only the caption text."""
             },
             'threads': {
-                'max_words': 80,  # Reduced to ensure under 500 chars
-                'max_chars': 450,  # Strictly under 500 to avoid API error
-                'hashtag_count': '1-2',
-                'prompt': f"""Write a concise, punchy Threads post for content titled '{filename}'.
+                'max_words': 90,  # to target ~390 chars
+                'max_chars': 390,  # Strict limit per requirement
+                'hashtag_count': '2-3',
+                'prompt': f"""Write a concise, hopeful Threads post for '{filename}' (≤390 characters). Tone: motivational + emotional in a positive way. Include 2-3 topic-specific hashtags.
 
 CRITICAL REQUIREMENTS:
-- ABSOLUTE MAXIMUM: 450 characters total (including hashtags and spaces)
-- MUST be under 500 characters - this is a hard limit
-- Include exactly 1-2 trending hashtags at the end
+- ABSOLUTE MAXIMUM: 390 characters total (including hashtags and spaces)
+- Include exactly 2-3 trending, topic-specific hashtags at the end
 - Start with a strong hook to grab attention immediately
 - Keep it conversational, engaging, and shareable
 - Write in a casual, friendly tone
@@ -277,11 +278,11 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                             self.log_console_only(f"🔄 Trying model: {model_name}", level=logging.INFO)
                             # Adjust max_tokens based on platform
                             if platform == 'threads':
-                                max_tokens = 200  # Lower for Threads (shorter content)
+                                max_tokens = 180  # Lower for Threads (shorter content, 390 chars)
                             elif platform == 'facebook':
-                                max_tokens = 4000  # Higher for Facebook (longer content)
+                                max_tokens = 2500  # For ~2000 chars
                             else:
-                                max_tokens = 2200  # Instagram (adjusted to match 2,000 char limit)
+                                max_tokens = 2000  # Instagram (~1800 chars)
                             
                             response = groq_client.chat.completions.create(
                                 model=model_name,
@@ -323,8 +324,8 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                     
                     # Strict character limit enforcement (especially for Threads and Instagram)
                     if platform == 'threads':
-                        # Threads has strict 500 character limit - be very conservative
-                        max_allowed = 450  # Leave buffer for safety
+                        # Threads strict limit: 390 chars target
+                        max_allowed = 360  # buffer for safety
                         if len(caption) > max_allowed:
                             # Truncate at word boundary
                             truncated = caption[:max_allowed-10]
@@ -346,8 +347,8 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                             
                             self.log_console_only(f"⚠️ Threads caption truncated to {len(caption)} chars (limit: 500)", level=logging.WARNING)
                     elif platform == 'instagram':
-                        # Instagram has strict 2,000 character limit - be conservative
-                        max_allowed = 1900  # Leave buffer for safety (2000 - 100)
+                        # Instagram target limit: 1,800 chars
+                        max_allowed = 1700  # buffer for safety
                         if len(caption) > max_allowed:
                             # Truncate at word boundary, try to preserve hashtags
                             truncated = caption[:max_allowed-20]
@@ -371,9 +372,9 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                             else:
                                 caption = truncated.rstrip()
                             
-                            # Final safety check - must be under 2,000
-                            if len(caption) >= 2000:
-                                caption = caption[:1995].rstrip()
+                            # Final safety check - must be under 1,800
+                            if len(caption) >= 1800:
+                                caption = caption[:1795].rstrip()
                             
                             self.log_console_only(f"⚠️ Instagram caption truncated to {len(caption)} chars (limit: 2,000)", level=logging.WARNING)
                     elif len(caption) > config['max_chars']:
@@ -385,15 +386,15 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                         else:
                             caption = truncated + "..."
                     
-                    # Final validation for Threads - must be under 500
-                    if platform == 'threads' and len(caption) >= 500:
+                    # Final validation for Threads - must be under 390
+                    if platform == 'threads' and len(caption) >= 390:
                         self.log_console_only(f"⚠️ Threads caption still too long ({len(caption)} chars), forcing truncation", level=logging.WARNING)
-                        caption = caption[:495].rstrip()
+                        caption = caption[:385].rstrip()
                     
-                    # Final validation for Instagram - must be under 2,000
-                    if platform == 'instagram' and len(caption) >= 2000:
+                    # Final validation for Instagram - must be under 1,800
+                    if platform == 'instagram' and len(caption) >= 1800:
                         self.log_console_only(f"⚠️ Instagram caption still too long ({len(caption)} chars), forcing truncation", level=logging.WARNING)
-                        caption = caption[:1995].rstrip()
+                        caption = caption[:1795].rstrip()
                     
                     captions[platform] = caption
                     
@@ -441,27 +442,27 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                 
                 self.log_console_only(f"✅ Threads caption fixed: {len(captions['threads'])} chars", level=logging.INFO)
         
-        # CRITICAL: Final validation for Instagram character limit
+        # CRITICAL: Final validation for Instagram character limit (≤1800)
         if 'instagram' in captions:
             instagram_caption = captions['instagram']
-            if len(instagram_caption) >= 2000:
+            if len(instagram_caption) >= 1800:
                 self.log_console_only(f"⚠️ CRITICAL: Instagram caption exceeds limit ({len(instagram_caption)} chars). Forcing truncation.", level=logging.ERROR)
                 # Aggressively truncate
-                instagram_caption = instagram_caption[:1950].rstrip()
+                instagram_caption = instagram_caption[:1750].rstrip()
                 # Try to preserve hashtags if they exist
                 last_hashtag = instagram_caption.rfind('#')
-                if last_hashtag > 1900:
+                if last_hashtag > 1650:
                     # Hashtags are near the end, keep them
                     main_text = instagram_caption[:last_hashtag].rstrip()
                     hashtags = instagram_caption[last_hashtag:]
-                    if len(main_text) + len(hashtags) < 2000:
+                    if len(main_text) + len(hashtags) < 1800:
                         captions['instagram'] = main_text + " " + hashtags
                     else:
                         # Hashtags too long, truncate them too
-                        available = 2000 - len(main_text) - 1
+                        available = 1800 - len(main_text) - 1
                         captions['instagram'] = main_text + " " + hashtags[:available].rstrip()
                 else:
-                    captions['instagram'] = instagram_caption[:1995].rstrip()
+                    captions['instagram'] = instagram_caption[:1795].rstrip()
                 
                 self.log_console_only(f"✅ Instagram caption fixed: {len(captions['instagram'])} chars", level=logging.INFO)
         

@@ -214,14 +214,14 @@ Flow to follow (do NOT label the sections, just write the caption):
 Generate only the caption text (no section labels, no extra notes). Keep it under 1,800 characters total, clearly paragraph-separated, and fully tied to the filename '{filename}' topic. Remember: Hashtags MUST be generated based on the filename '{filename}'."""
             },
             'facebook': {
-                'max_words': 380,
-                'max_chars': 2000,  # Facebook target cap: 2,000 characters
+                'max_words': 480,
+                'max_chars': 3000,  # Facebook target cap: 2,000 characters
                 'hashtag_count': '5-10',
                 'prompt': f"""Create a detailed, engaging Facebook-style caption for '{filename}' that encourages shares and comments, in multiple short paragraphs with emojis. Mix motivational + emotional in a positive, hopeful way.
 
 CRITICAL REQUIREMENTS:
-- Maximum 2,000 characters total (including hashtags)
-- Aim ~380 words (but stay under 2,000 chars)
+- Maximum 3,000 characters total (including hashtags)
+- Aim ~480 words (but stay under 2,000 chars)
 - End with exactly 5-10 targeted, topic-specific hashtags (no generic tags)
 - Use storytelling style with engaging narrative
 - Include questions to encourage engagement
@@ -301,7 +301,7 @@ Generate only the caption text, nothing else. Keep it short and powerful. Rememb
                             if platform == 'threads':
                                 max_tokens = 180  # Lower for Threads (shorter content, 390 chars)
                             elif platform == 'facebook':
-                                max_tokens = 2500  # For ~2000 chars
+                                max_tokens = 3500  # For ~2000 chars
                             else:
                                 max_tokens = 2000  # Instagram (~1800 chars)
                             

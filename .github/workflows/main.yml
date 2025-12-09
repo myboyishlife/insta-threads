@@ -1,9 +1,12 @@
 name: Unified Social Media Uploader
 
 on:
+on:
   schedule:
-    - cron: "0 6 * * *"   # At 06:00 UTC every day (11:30 AM IST)
-    - cron: "0 18 * * *"  # At 18:00 UTC every day (11:30 PM IST)
+    - cron: "0 1 * * *"    # 01:00 UTC = 06:30 AM IST (Morning: Threads/Instagram)
+    - cron: "0 6 * * *"    # 06:00 UTC = 11:30 AM IST (Midday: Facebook)
+    - cron: "0 12 * * *"   # 12:00 UTC = 05:30 PM IST (Afternoon: All platforms)
+    - cron: "0 14 * * *"   # 14:00 UTC = 07:30 PM IST (Evening: Instagram peak)
   workflow_dispatch:
 
 jobs:

@@ -2,8 +2,8 @@ name: Unified Social Media Uploader
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # At 06:00 UTC every day
-    - cron: "0 18 * * *"  # At 18:00 UTC every day
+    - cron: "0 6 * * *"   # At 06:00 UTC every day (11:30 AM IST)
+    - cron: "0 18 * * *"  # At 18:00 UTC every day (11:30 PM IST)
   workflow_dispatch:
 
 jobs:
@@ -21,10 +21,12 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install requests python-telegram-bot==13.15 dropbox pytz moviepy==1.0.3 groq
+          pip install requests python-telegram-bot==13.15 dropbox pytz moviepy==1.0.3 groq python-dotenv
 
       - name: Run uploader
         env:
+          # 🔥 ADD THIS LINE - MISSING GROQ KEY
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           META_TOKEN: ${{ secrets.META_TOKEN }}
           IG_ID: ${{ secrets.IG_ID }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}

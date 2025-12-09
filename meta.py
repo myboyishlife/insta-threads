@@ -8,7 +8,13 @@ from datetime import datetime
 from pytz import timezone
 import random
 import re
-from groq import Groq
+
+# Try to import Groq with fallback
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
 
 class UnifiedSocialMediaUploader:
     DROPBOX_TOKEN_URL = "https://api.dropbox.com/oauth2/token"
@@ -18,6 +24,7 @@ class UnifiedSocialMediaUploader:
     INSTAGRAM_REEL_STATUS_RETRIES = 10
     INSTAGRAM_REEL_STATUS_WAITTIME = 15
     
+    # Verification configuration
     VERIFY_DELAY_INSTAGRAM = 8
     VERIFY_DELAY_FACEBOOK = 4
     VERIFY_DELAY_THREADS = 3
@@ -25,17 +32,19 @@ class UnifiedSocialMediaUploader:
     VERIFY_INTERVAL = 5
     USE_EXPONENTIAL_BACKOFF = False
     
+    # Publish retry configuration
     INSTAGRAM_PUBLISH_ATTEMPTS = 3
     FACEBOOK_PUBLISH_ATTEMPTS = 3
     THREADS_PUBLISH_ATTEMPTS = 5
     PUBLISH_RETRY_INTERVAL = 5
     PUBLISH_MAX_WAITTIME = 30
-    
+
     def __init__(self):
         self.script_name = "news.py"
         self.ist = timezone('Asia/Kolkata')
         self.account_key = "ink-wisps"
         
+        # Logging
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
@@ -43,34 +52,43 @@ class UnifiedSocialMediaUploader:
         )
         self.logger = logging.getLogger(__name__)
         
-        # Meta/Instagram/Facebook
+        # Instagram/Facebook secrets
         self.meta_token = os.getenv('METATOKEN')
         self.ig_id = os.getenv('IGID')
         self.fb_page_id = os.getenv('FBPAGEID')
         
-        # Threads
+        # Threads secrets
         self.threads_user_id = os.getenv('THREADSUSERID')
         self.threads_access_token = os.getenv('THREADSACCESSTOKEN')
         
-        # Telegram
+        # Telegram configuration
         self.telegram_token = os.getenv('TELEGRAMBOTTOKEN')
         self.telegram_chat_id = os.getenv('TELEGRAMCHATID')
-        self.telegram_bot = Bot(token=self.telegram_token) if self.telegram_token else None
         
-        # Dropbox
+        # Dropbox configuration
         self.dropbox_key = os.getenv('DROPBOXAPPKEY')
         self.dropbox_secret = os.getenv('DROPBOXAPPSECRET')
         self.dropbox_refresh = os.getenv('DROPBOXREFRESHTOKEN')
         self.dropbox_folder = "ink-wisps"
         
-        # Groq AI
-        self.groq_api_key = os.getenv('GROQ_API_KEY')
-        self.groq_client = Groq(api_key=self.groq_api_key) if self.groq_api_key else None
+        if self.telegram_token:
+            self.telegram_bot = Bot(token=self.telegram_token)
+        else:
+            self.telegram_bot = None
         
         self.start_time = time.time()
         self.session = requests.Session()
         self.log_buffer = []
-    
+        
+        # Groq AI setup (NEW)
+        self.groq_api_key = os.getenv('GROQ_API_KEY')
+        if GROQ_AVAILABLE and self.groq_api_key:
+            self.groq_client = Groq(api_key=self.groq_api_key)
+            self.ai_available = True
+        else:
+            self.groq_client = None
+            self.ai_available = False
+
     def send_message(self, msg, level=logging.INFO, immediate=False):
         prefix = f"[{self.script_name}]"
         full_msg = f"{prefix} {msg}"
@@ -86,15 +104,28 @@ class UnifiedSocialMediaUploader:
             self.logger.error(full_msg)
         else:
             self.logger.info(full_msg)
-    
+
+    def send_log_summary(self):
+        """Send buffered log messages as summary to Telegram."""
+        if self.telegram_bot and self.telegram_chat_id and self.log_buffer:
+            summary = '\n'.join(self.log_buffer)
+            maxlen = 4000
+            for i in range(0, len(summary), maxlen):
+                try:
+                    self.telegram_bot.send_message(chat_id=self.telegram_chat_id, text=summary[i:i+maxlen])
+                except Exception as e:
+                    self.logger.error(f"Telegram send error: {e}")
+            self.log_buffer = []
+
     def log_console_only(self, msg, level=logging.INFO):
+        """Log message to console only, not to Telegram."""
         prefix = f"[{self.script_name}]"
         full_msg = f"{prefix} {msg}"
         if level == logging.ERROR:
             self.logger.error(full_msg)
         else:
             self.logger.info(full_msg)
-    
+
     def refresh_dropbox_token(self):
         self.logger.info("Refreshing Dropbox token...")
         data = {
@@ -111,87 +142,79 @@ class UnifiedSocialMediaUploader:
         else:
             self.send_message(f"Dropbox refresh failed: {r.text}", level=logging.ERROR, immediate=True)
             raise Exception("Dropbox refresh failed.")
-    
+
     def list_dropbox_files(self, dbx):
         try:
             files = dbx.files_list_folder(self.dropbox_folder).entries
-            valid_exts = ['.mp4', '.mov', '.jpg', '.jpeg', '.png']
-            return [f for f in files if f.name.lower().endswith(tuple(valid_exts))]
+            valid_exts = ('.mp4', '.mov', '.jpg', '.jpeg', '.png')
+            return [f for f in files if f.name.lower().endswith(valid_exts)]
         except Exception as e:
             self.send_message(f"Dropbox folder read failed: {e}", level=logging.ERROR, immediate=True)
             return []
-    
-    def generate_ai_caption(self, filename, platform):
-        """Generate AI caption based on platform word limits."""
-        if not self.groq_client:
-            self.send_message("Groq API key not configured, using filename fallback", level=logging.WARNING)
-            return self.build_caption_from_filename(filename)
+
+    def build_caption_from_filename(self, file, platform='instagram'):
+        """Generate AI caption based on platform OR use filename as fallback."""
+        # Original fallback logic
+        basename = os.path.splitext(file.name)[0]
+        basename = basename.replace('_', ' ').replace('-', ' ')
         
-        clean_filename = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ').title()
+        # If AI not available, return filename
+        if not hasattr(self, 'ai_available') or not self.ai_available:
+            return basename
         
-        word_limits = {
-            'instagram': 500,
-            'facebook': 1000,
-            'threads': 300
-        }
-        
+        # AI Caption Generation
+        clean_filename = basename.title()
+        word_limits = {'instagram': 500, 'facebook': 1000, 'threads': 300}
         max_words = word_limits.get(platform, 500)
         
         prompts = {
-            'instagram': f"""
-            Create engaging Instagram caption for content titled '{clean_filename}'.
-            Max {max_words} words. Use emojis, storytelling, call-to-action.
-            End with 8-10 relevant trending hashtags based on filename.
-            Make it exciting and shareable.""",
+            'instagram': f"""Create an engaging Instagram caption for content titled '{clean_filename}'.
+Maximum {max_words} words. Use emojis 🔥✨🚀, storytelling style, and a call-to-action.
+End with 8-10 relevant trending hashtags based on the content.""",
             
-            'facebook': f"""
-            Write detailed Facebook post for '{clean_filename}'.
-            Max {max_words} words. Use storytelling, questions for engagement.
-            Include value, benefits. End with 5-8 targeted hashtags.""",
+            'facebook': f"""Write a detailed Facebook post for '{clean_filename}'.
+Maximum {max_words} words. Use storytelling, ask questions for engagement, and provide value.
+End with 5-8 targeted hashtags.""",
             
-            'threads': f"""
-            Write conversational Threads post about '{clean_filename}'.
-            Max {max_words} words. Start with hook, be authentic.
-            Include 3-5 relevant hashtags. Keep it natural."""
+            'threads': f"""Write a conversational Threads post about '{clean_filename}'.
+Maximum {max_words} words. Start with an attention-grabbing hook, keep it authentic.
+Include 3-5 relevant hashtags."""
         }
         
         try:
             response = self.groq_client.chat.completions.create(
                 model="llama3-8b-8192",
                 messages=[{"role": "user", "content": prompts[platform]}],
-                max_tokens=2000,
+                max_tokens=3000,
                 temperature=0.7
             )
-            
             caption = response.choices[0].message.content.strip()
             
-            # Truncate to word limit
+            # Enforce word limit
             words = caption.split()
             if len(words) > max_words:
                 caption = ' '.join(words[:max_words]) + "..."
             
-            self.log_console_only(f"AI generated {platform} caption ({len(words)} words): {caption[:100]}...")
+            word_count = len(caption.split())
+            self.log_console_only(f"AI {platform} caption ({word_count} words): {caption[:80]}...")
             return caption
             
         except Exception as e:
-            self.send_message(f"Groq AI failed for {platform}: {e}", level=logging.ERROR)
-            return self.build_caption_from_filename(filename)
-    
-    def build_caption_from_filename(self, file):
-        """Fallback: Use filename as caption."""
-        basename = os.path.splitext(file.name)[0]
-        basename = basename.replace('_', ' ').replace('-', ' ')
-        return basename
-    
+            self.log_console_only(f"AI generation failed: {e}. Using filename fallback.")
+            return basename
+
     def get_page_access_token(self):
         """Fetch Facebook Page Access Token."""
         try:
             self.log_console_only("Fetching Page Access Token from Meta API...", level=logging.INFO)
             url = f"https://graph.facebook.com/v18.0/me/accounts"
             params = {'access_token': self.meta_token}
+            
+            self.log_console_only(f"API URL: {url}", level=logging.INFO)
             start_time = time.time()
             res = self.session.get(url, params=params)
             request_time = time.time() - start_time
+            
             self.log_console_only(f"Page token request completed in {request_time:.2f} seconds", level=logging.INFO)
             self.log_console_only(f"Response status: {res.status_code}", level=logging.INFO)
             
@@ -223,7 +246,7 @@ class UnifiedSocialMediaUploader:
         except Exception as e:
             self.send_message(f"Exception during Page token fetch: {e}", level=logging.ERROR, immediate=True)
             return None
-    
+
     def get_dropbox_video_metadata(self, dbx, file):
         """Get width, height, duration from Dropbox file metadata."""
         from dropbox.files import VideoMetadata, PhotoMetadata
@@ -233,20 +256,21 @@ class UnifiedSocialMediaUploader:
                 info = metadata.media_info.get('metadata')
                 width = None
                 height = None
-                duration = None
                 
                 if getattr(info, 'dimensions', None) is not None:
                     width = info.dimensions.width
                     height = info.dimensions.height
                 
                 if isinstance(info, VideoMetadata):
-                    duration = info.duration / 1000.0  # ms to seconds
+                    duration = info.duration / 1000.0
+                else:
+                    duration = None
                 
                 return width, height, duration
         except:
             pass
         return None, None, None
-    
+
     def check_facebook_reel_requirements(self, width, height, duration):
         """Check if video meets Facebook Reel requirements."""
         if width is None or height is None or duration is None:
@@ -261,7 +285,7 @@ class UnifiedSocialMediaUploader:
         min_duration = 3
         
         is_portrait = height > width
-        is_valid_ratio = abs(aspect_ratio - 0.5625) < 0.01  # 9:16
+        is_valid_ratio = abs(aspect_ratio - 0.5625) < 0.01
         meets_minimum_size = height >= min_height and width >= min_width
         meets_maximum_size = height <= max_height and width <= max_width
         meets_duration = min_duration <= duration <= max_duration
@@ -269,14 +293,17 @@ class UnifiedSocialMediaUploader:
         result = is_portrait and is_valid_ratio and meets_minimum_size and meets_maximum_size and meets_duration
         
         self.log_console_only(
-            f"Facebook Reel Check: Size {width}x{height} portrait:{is_portrait} "
-            f"Min:{min_width}x{min_height}:{meets_minimum_size} Max:{max_width}x{max_height}:{meets_maximum_size} "
-            f"Aspect:{aspect_ratio:.4f} valid:{is_valid_ratio} Duration:{duration}s min:{min_duration}s,max:{max_duration}s:{meets_duration} "
-            f"Meets all:{result}",
+            f"Facebook Reel Check: "
+            f"Size {width}x{height} portrait:{is_portrait} "
+            f"Min Size {min_width}x{min_height}:{meets_minimum_size} "
+            f"Max Size {max_width}x{max_height}:{meets_maximum_size} "
+            f"Aspect Ratio {aspect_ratio:.4f} valid:{is_valid_ratio} "
+            f"Duration {duration}s (min {min_duration}s, max {max_duration}s):{meets_duration} "
+            f"Meets all requirements: {result}",
             level=logging.INFO
         )
         return result
-    
+
     def post_to_instagram(self, dbx, file, caption, page_token, total_files=None):
         """Post to Instagram using the provided page token."""
         name = file.name
@@ -378,7 +405,7 @@ class UnifiedSocialMediaUploader:
             if pub.status_code == 200:
                 response_data = pub.json()
                 instagram_id = response_data.get('id', 'Unknown')
-                if not instagram_id or instagram_id == 'Unknown':
+                if not instagram_id:
                     self.send_message("Instagram publish succeeded but no media ID returned", level=logging.WARNING, immediate=True)
                     return False
                 else:
@@ -386,9 +413,12 @@ class UnifiedSocialMediaUploader:
                     self.verify_instagram_post_by_media_id(instagram_id, page_token)
                     return True
             else:
-                error_msg = pub.json().get('error', {}).get('message', 'Unknown')
+                error_msg = pub.json().get('error', {}).get('message', 'Unknown error')
                 error_type = self.classify_error(pub.status_code)
-                self.log_console_only(f"Instagram publish failed attempt {attempt + 1}/{self.INSTAGRAM_PUBLISH_ATTEMPTS}: {error_msg} HTTP:{pub.status_code} {error_type}", level=logging.INFO)
+                self.log_console_only(
+                    f"Instagram publish failed (attempt {attempt + 1}/{self.INSTAGRAM_PUBLISH_ATTEMPTS}): {error_msg} HTTP:{pub.status_code} ({error_type})",
+                    level=logging.INFO
+                )
                 
                 if error_type == 'permanent' or attempt == self.INSTAGRAM_PUBLISH_ATTEMPTS - 1:
                     self.send_message(f"Instagram publish failed: {error_msg}", level=logging.ERROR, immediate=True)
@@ -400,7 +430,7 @@ class UnifiedSocialMediaUploader:
         
         self.send_message(f"Instagram publish failed after {self.INSTAGRAM_PUBLISH_ATTEMPTS} attempts", level=logging.ERROR, immediate=True)
         return False
-    
+
     def post_to_facebook_page(self, dbx, file, caption, page_token):
         """Post to Facebook with conditional Reel/Video logic."""
         media_url = dbx.files_get_temporary_link(file.path_lower()).link
@@ -416,8 +446,8 @@ class UnifiedSocialMediaUploader:
                 self.send_message("Could not retrieve Facebook Page access token.", level=logging.ERROR, immediate=True)
                 return False
         
-        image_exts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp']
-        is_image = file.name.lower().endswith(tuple(image_exts))
+        image_exts = ('.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp')
+        is_image = file.name.lower().endswith(image_exts)
         
         if is_image:
             return self.post_facebook_photo(file, media_url, caption, page_token)
@@ -429,7 +459,7 @@ class UnifiedSocialMediaUploader:
             return self.post_facebook_reel(file, media_url, caption, page_token)
         else:
             return self.post_facebook_video(file, media_url, caption, page_token)
-    
+
     def post_facebook_reel(self, file, media_url, caption, page_token):
         """Post video as Facebook Reel."""
         self.log_console_only("Starting Facebook Reel upload...", level=logging.INFO)
@@ -452,8 +482,8 @@ class UnifiedSocialMediaUploader:
             self.send_message(f"No video_id or upload_url returned: {start_res.text}", level=logging.ERROR, immediate=True)
             return False
         
-        headers = {'Authorization': f'OAuth {page_token}'}
-        upload_res = self.session.post(upload_url, headers=headers, data={'file_url': media_url})
+        headers = {'Authorization': f'OAuth {page_token}', 'file_url': media_url}
+        upload_res = self.session.post(upload_url, headers=headers)
         
         if upload_res.status_code != 200:
             self.send_message(f"Facebook Reels upload failed: {upload_res.text}", level=logging.ERROR, immediate=True)
@@ -486,7 +516,10 @@ class UnifiedSocialMediaUploader:
             else:
                 error_msg = finish_res.text[:200] if finish_res.text else "Unknown error"
                 error_type = self.classify_error(finish_res.status_code)
-                self.log_console_only(f"Facebook Reel publish failed attempt {attempt + 1}/{self.FACEBOOK_PUBLISH_ATTEMPTS} HTTP:{finish_res.status_code} {error_type}", level=logging.INFO)
+                self.log_console_only(
+                    f"Facebook Reel publish failed (attempt {attempt + 1}/{self.FACEBOOK_PUBLISH_ATTEMPTS}) HTTP:{finish_res.status_code} ({error_type})",
+                    level=logging.INFO
+                )
                 
                 if error_type == 'permanent' or attempt == self.FACEBOOK_PUBLISH_ATTEMPTS - 1:
                     self.send_message(f"Facebook Reels publish failed: {error_msg}", level=logging.ERROR, immediate=True)
@@ -498,7 +531,7 @@ class UnifiedSocialMediaUploader:
         
         self.send_message(f"Facebook Reel publish failed after {self.FACEBOOK_PUBLISH_ATTEMPTS} attempts", level=logging.ERROR, immediate=True)
         return False
-    
+
     def post_facebook_video(self, file, media_url, caption, page_token):
         """Post video as regular Facebook video."""
         self.log_console_only("Starting Facebook Page video upload...", level=logging.INFO)
@@ -528,9 +561,12 @@ class UnifiedSocialMediaUploader:
                 self.verify_facebook_post_by_video_id(video_id, page_token)
                 return True
             else:
-                error_msg = res.json().get('error', {}).get('message', 'Unknown')
+                error_msg = res.json().get('error', {}).get('message', 'Unknown error')
                 error_type = self.classify_error(res.status_code)
-                self.log_console_only(f"Facebook video publish failed attempt {attempt + 1}/{self.FACEBOOK_PUBLISH_ATTEMPTS}: {error_msg} HTTP:{res.status_code} {error_type}", level=logging.INFO)
+                self.log_console_only(
+                    f"Facebook video publish failed (attempt {attempt + 1}/{self.FACEBOOK_PUBLISH_ATTEMPTS}): {error_msg} HTTP:{res.status_code} ({error_type})",
+                    level=logging.INFO
+                )
                 
                 if error_type == 'permanent' or attempt == self.FACEBOOK_PUBLISH_ATTEMPTS - 1:
                     self.send_message(f"Facebook video upload failed: {error_msg}", level=logging.ERROR, immediate=True)
@@ -542,7 +578,7 @@ class UnifiedSocialMediaUploader:
         
         self.send_message(f"Facebook video publish failed after {self.FACEBOOK_PUBLISH_ATTEMPTS} attempts", level=logging.ERROR, immediate=True)
         return False
-    
+
     def post_facebook_photo(self, file, media_url, caption, page_token):
         """Post image as Facebook photo."""
         self.log_console_only("Starting Facebook photo upload...", level=logging.INFO)
@@ -559,10 +595,10 @@ class UnifiedSocialMediaUploader:
             self.send_message(f"Facebook photo published! Photo ID: {photo_id}", immediate=True)
             return True
         else:
-            error_msg = res.json().get('error', {}).get('message', 'Unknown')
+            error_msg = res.json().get('error', {}).get('message', 'Unknown error')
             self.send_message(f"Facebook photo upload failed: {error_msg}", level=logging.ERROR, immediate=True)
             return False
-    
+
     def post_to_threads(self, dbx, file, caption, total_files=None):
         """Post to Threads using the threads access token."""
         name = file.name.lower()
@@ -621,7 +657,7 @@ class UnifiedSocialMediaUploader:
                 return False
             time.sleep(4)
         
-        publish_url = f"{self.THREADS_API_BASE}/{self.threads_user_id}/threadspublish"
+        publish_url = f"{self.THREADS_API_BASE}/{self.threads_user_id}/threads_publish"
         publish_data = {
             'access_token': self.threads_access_token,
             'creation_id': creation_id
@@ -640,11 +676,14 @@ class UnifiedSocialMediaUploader:
                 thread_id = pub_res.json().get('id', 'Unknown')
                 self.send_message(f"Threads post published! ID: {thread_id}", immediate=True)
                 self.verify_threads_post(thread_id)
-                return True
+                return thread_id
             else:
-                error_msg = pub_res.json().get('error', {}).get('message', 'Unknown')
+                error_msg = pub_res.json().get('error', {}).get('message', 'Unknown error')
                 error_type = self.classify_error(pub_res.status_code)
-                self.log_console_only(f"Threads publish failed attempt {attempt + 1}/{self.THREADS_PUBLISH_ATTEMPTS}: {error_msg} HTTP:{pub_res.status_code} {error_type}", level=logging.INFO)
+                self.log_console_only(
+                    f"Threads publish failed (attempt {attempt + 1}/{self.THREADS_PUBLISH_ATTEMPTS}): {error_msg} HTTP:{pub_res.status_code} ({error_type})",
+                    level=logging.INFO
+                )
                 
                 if error_type == 'permanent' or attempt == self.THREADS_PUBLISH_ATTEMPTS - 1:
                     self.send_message(f"Threads publish failed: {error_msg}", level=logging.ERROR, immediate=True)
@@ -656,23 +695,23 @@ class UnifiedSocialMediaUploader:
         
         self.send_message(f"Threads publish failed after {self.THREADS_PUBLISH_ATTEMPTS} attempts", level=logging.ERROR, immediate=True)
         return False
-    
+
     def extract_first_hashtag(self, text):
-        """Extract the first hashtag from text for use as topic tag."""
-        match = re.search(r'#\w+', text)
+        """Extract the first hashtag without # from text for use as topic tag."""
+        match = re.search(r'#(\w+)', text)
         return match.group(1) if match else None
-    
+
     def classify_error(self, status_code):
         """Classify error types to determine retry behavior."""
         if status_code in [400, 403, 404]:
-            return 'permanent'  # Don't retry
+            return 'permanent'
         elif status_code == 429:
-            return 'ratelimit'  # Retry after longer delay
+            return 'ratelimit'
         elif 500 <= status_code < 600:
-            return 'transient'  # Retry normally
+            return 'transient'
         else:
-            return 'unknown'  # Retry normally
-    
+            return 'unknown'
+
     def unified_verify_post(self, platform_name, check_fn, initial_delay=0):
         """Unified verification logic for all platforms."""
         try:
@@ -690,7 +729,7 @@ class UnifiedSocialMediaUploader:
                     self.log_console_only(f"{platform_name} post verified as live! {message}", level=logging.INFO)
                     return True
                 
-                if attempt == self.VERIFY_ATTEMPTS - 1:
+                if attempt < self.VERIFY_ATTEMPTS - 1:
                     if self.USE_EXPONENTIAL_BACKOFF:
                         backoff_time = self.VERIFY_INTERVAL * (2 ** attempt)
                     else:
@@ -705,12 +744,12 @@ class UnifiedSocialMediaUploader:
         except Exception as e:
             self.send_message(f"Exception verifying {platform_name} post: {e}", level=logging.ERROR)
             return False
-    
+
     def verify_instagram_post_by_media_id(self, media_id, page_token):
         """Verify Instagram post is live by polling the published media_id."""
         url = f"{self.INSTAGRAM_API_BASE}/{media_id}"
         params = {
-            'fields': 'id,permalink_url,media_type,media_url,thumbnail_url,created_time',
+            'fields': 'id,permalink,media_type,media_url,thumbnail_url,timestamp',
             'access_token': page_token
         }
         
@@ -718,7 +757,7 @@ class UnifiedSocialMediaUploader:
             res = self.session.get(url, params=params)
             if res.status_code == 200:
                 post_data = res.json()
-                permalink = post_data.get('permalink_url', 'Not available')
+                permalink = post_data.get('permalink', 'Not available')
                 return True, res.status_code, f"permalink:{permalink}"
             else:
                 try:
@@ -729,7 +768,7 @@ class UnifiedSocialMediaUploader:
                 return False, res.status_code, error_msg
         
         return self.unified_verify_post("Instagram", check_post, self.VERIFY_DELAY_INSTAGRAM)
-    
+
     def verify_facebook_post_by_video_id(self, video_id, page_token):
         """Verify Facebook video post is live by polling the video_id."""
         url = f"https://graph.facebook.com/{video_id}"
@@ -753,7 +792,7 @@ class UnifiedSocialMediaUploader:
                 return False, res.status_code, error_msg
         
         return self.unified_verify_post("Facebook", check_post, self.VERIFY_DELAY_FACEBOOK)
-    
+
     def verify_threads_post(self, thread_id):
         """Verify Threads post is live by polling the thread_id."""
         url = f"{self.THREADS_API_BASE}/{thread_id}"
@@ -772,38 +811,95 @@ class UnifiedSocialMediaUploader:
                 return False, res.status_code, error_msg
         
         return self.unified_verify_post("Threads", check_post, self.VERIFY_DELAY_THREADS)
-    
-    def process_file(self, dbx, file):
-        """Process one file with AI-generated captions."""
+
+    def check_instagram_page_connection(self, page_token):
+        """Check if Instagram account is properly connected to the Facebook page."""
+        try:
+            self.log_console_only("Checking Instagram-Facebook connection...", level=logging.INFO)
+            url = f"https://graph.facebook.com/v18.0/{self.fb_page_id}"
+            params = {
+                'fields': 'instagram_business_account,connected_instagram_account',
+                'access_token': page_token
+            }
+            res = self.session.get(url, params=params)
+            
+            if res.status_code != 200:
+                self.send_message(f"Failed to check Instagram connection: {res.text}", level=logging.ERROR, immediate=True)
+                return False
+            
+            data = res.json()
+            instagram_business_account = data.get('instagram_business_account', {})
+            connected_instagram = data.get('connected_instagram_account', {})
+            
+            if instagram_business_account:
+                instagram_id = instagram_business_account.get('id', 'Unknown')
+                self.log_console_only(f"Instagram Business Account connected: {instagram_id}", level=logging.INFO)
+                if instagram_id == self.ig_id:
+                    self.log_console_only("Instagram ID matches ✓", level=logging.INFO)
+                    return True
+                else:
+                    self.send_message(f"Instagram ID mismatch! Connected: {instagram_id}, Expected: {self.ig_id}", level=logging.WARNING, immediate=True)
+                    return False
+            elif connected_instagram:
+                self.log_console_only("Instagram Account connected ✓", level=logging.INFO)
+                return True
+            else:
+                self.send_message("No Instagram account connected!", level=logging.ERROR, immediate=True)
+                return False
+        except Exception as e:
+            self.send_message(f"Exception checking connection: {e}", level=logging.ERROR, immediate=True)
+            return False
+
+    def authenticate_dropbox(self):
+        """Authenticate with Dropbox and return the client."""
+        try:
+            access_token = self.refresh_dropbox_token()
+            return dropbox.Dropbox(oauth2_access_token=access_token)
+        except Exception as e:
+            self.send_message(f"Dropbox authentication failed: {e}", level=logging.ERROR, immediate=True)
+            raise
+
+    def process_file(self, dbx):
+        """Process a single file and post to all platforms with AI captions."""
+        files = self.list_dropbox_files(dbx)
+        if not files:
+            self.log_console_only("No files found in Dropbox folder.", level=logging.INFO)
+            return False
+        
+        file = random.choice(files)
+        total_files = len(files)
+        self.log_console_only(f"Processing: {file.name}", level=logging.INFO)
+        
+        # Generate platform-specific AI captions
+        captions = {
+            'instagram': self.build_caption_from_filename(file, platform='instagram'),  # 500 words
+            'facebook': self.build_caption_from_filename(file, platform='facebook'),    # 1000 words
+            'threads': self.build_caption_from_filename(file, platform='threads')       # 300 words
+        }
+        
         results = {'instagram': False, 'facebook': False, 'threads': False}
         
         try:
-            # Generate AI captions for each platform
-            captions = {
-                'instagram': self.generate_ai_caption(file.name, 'instagram'),  # 500 words
-                'facebook': self.generate_ai_caption(file.name, 'facebook'),    # 1000 words
-                'threads': self.generate_ai_caption(file.name, 'threads')       # 300 words
-            }
-            
             page_token = self.get_page_access_token()
             if not page_token:
                 self.send_message("Could not retrieve Page access token. Aborting Instagram/Facebook.", level=logging.ERROR, immediate=True)
                 results['instagram'] = False
                 results['facebook'] = False
             else:
-                # Post to Instagram
-                results['instagram'] = self.post_to_instagram(dbx, file, captions['instagram'], page_token)
-                # Post to Facebook
+                if not self.check_instagram_page_connection(page_token):
+                    self.send_message("Instagram not properly connected. Aborting Instagram.", level=logging.ERROR, immediate=True)
+                    results['instagram'] = False
+                else:
+                    results['instagram'] = self.post_to_instagram(dbx, file, captions['instagram'], page_token, total_files)
+                
                 results['facebook'] = self.post_to_facebook_page(dbx, file, captions['facebook'], page_token)
             
-            # Post to Threads
-            thread_id = self.post_to_threads(dbx, file, captions['threads'])
+            thread_id = self.post_to_threads(dbx, file, captions['threads'], total_files)
             if thread_id and thread_id != 'Unknown':
                 results['threads'] = True
             else:
                 results['threads'] = False
             
-            # Status report
             status_report = []
             if results['instagram']:
                 status_report.append("Instagram ✅")
@@ -821,38 +917,45 @@ class UnifiedSocialMediaUploader:
                 status_report.append("Threads ❌")
             
             self.log_console_only(f"Final Status: {' | '.join(status_report)}")
+            
+            summary_lines = [
+                f"📊 Posting Summary",
+                f"Instagram: {'Success' if results['instagram'] else 'Failed'}",
+                f"Facebook: {'Success' if results['facebook'] else 'Failed'}",
+                f"Threads: {'Success' if results['threads'] else 'Failed'}"
+            ]
+            self.send_message('\n'.join(summary_lines), immediate=True)
+            
+            try:
+                dbx.files_delete_v2(file.path_lower())
+                self.log_console_only(f"Deleted: {file.name}")
+            except Exception as e:
+                self.log_console_only(f"Failed to delete: {e}", level=logging.WARNING)
+            
             return any(results.values())
             
         except Exception as e:
             self.send_message(f"Exception during post: {e}", level=logging.ERROR, immediate=True)
             return False
-    
+
     def run(self):
         """Main execution method."""
         self.log_console_only(f"Run started: {datetime.now(self.ist).strftime('%Y-%m-%d %H:%M:%S')}", level=logging.INFO)
         try:
-            dbx = dropbox.Dropbox(oauth2_refresh=self.dropbox_refresh, app_key=self.dropbox_key, app_secret=self.dropbox_secret)
+            dbx = self.authenticate_dropbox()
             
-            files = self.list_dropbox_files(dbx)
-            if not files:
-                self.send_message("No valid files found in Dropbox folder", level=logging.WARNING, immediate=True)
-                return
-            
-            success = self.process_file(dbx, files[0])  # Process first file
-            
+            success = self.process_file(dbx)
             if success:
-                self.send_message("Social media posting completed! ✅", level=logging.INFO, immediate=True)
+                self.send_message("Social media posting completed!", level=logging.INFO, immediate=True)
             else:
-                self.send_message("All platforms failed. ❌", level=logging.ERROR, immediate=True)
-                
+                self.send_message("All platforms failed.", level=logging.ERROR, immediate=True)
         except Exception as e:
             self.send_message(f"Script crashed: {e}", level=logging.ERROR, immediate=True)
             raise
         finally:
+            self.send_log_summary()
             duration = time.time() - self.start_time
             self.log_console_only(f"Run complete in {duration:.1f} seconds", level=logging.INFO)
-            self.send_log_summary()
 
 if __name__ == "__main__":
-    uploader = UnifiedSocialMediaUploader()
-    uploader.run()
+    UnifiedSocialMediaUploader().run()

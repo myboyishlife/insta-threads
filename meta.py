@@ -184,23 +184,34 @@ Requirements:
 - Friendly, conversational storytelling (like a Facebook post)
 - Use MULTIPLE short paragraphs with blank lines between them (do NOT make one big block)
 - Start with a strong hook opening the story naturally
-- Tell a descriptive, emotional story fully related to the filename
+- Tell a descriptive, emotional story fully related to the filename '{filename}'
 - Add value/insight and relatable details
 - Sprinkle emojis naturally in each paragraph (not all at the end)
-- End with exactly 5-10 topic-specific, non-generic hashtags
 - Finish with a call-to-action question to drive comments (e.g., "What would you do?", "Share your thoughts below")
 - Everything must stay under 1,800 characters including spaces/emojis/hashtags
 - Tone: motivational + emotional + hopeful
 
+CRITICAL HASHTAG REQUIREMENT:
+- You MUST generate exactly 5-10 hashtags at the very end
+- ALL hashtags MUST be directly related to the filename '{filename}' and the story content
+- Analyze the filename '{filename}' and create hashtags based on:
+  * The main topic/subject of the filename
+  * Key words or themes from the filename
+  * Related trending topics that match the filename context
+- NO generic hashtags like #love #instagood #photooftheday
+- ONLY topic-specific hashtags that relate to '{filename}'
+- Examples: If filename is "train journey story", hashtags should be like #trainjourney #travelstory #railway #journey #adventure (all related to trains/journeys)
+- The hashtags should help people discover content about the same topic as '{filename}'
+
 Flow to follow (do NOT label the sections, just write the caption):
 - Hooky first line that makes people keep reading
 - 3–5 short paragraphs, each with 2–4 sentences, separated by blank lines
-- Descriptive story with context (what happened, who, where) plus emotional, relatable details
+- Descriptive story with context (what happened, who, where) plus emotional, relatable details - all based on '{filename}'
 - Engagement element with a question that invites replies
 - Call-to-action question at the end
-- Hashtags at the very end (5-10, all tightly related to the filename/topic; no generic tags)
+- Hashtags at the very end (MUST be 5-10 hashtags, ALL related to filename '{filename}' topic)
 
-Generate only the caption text (no section labels, no extra notes). Keep it under 2,000 characters total, clearly paragraph-separated, and fully tied to the filename topic."""
+Generate only the caption text (no section labels, no extra notes). Keep it under 1,800 characters total, clearly paragraph-separated, and fully tied to the filename '{filename}' topic. Remember: Hashtags MUST be generated based on the filename '{filename}'."""
             },
             'facebook': {
                 'max_words': 380,
@@ -236,21 +247,31 @@ Generate only the caption text."""
 
 CRITICAL REQUIREMENTS:
 - ABSOLUTE MAXIMUM: 390 characters total (including hashtags and spaces)
-- Include exactly 2-3 trending, topic-specific hashtags at the end
 - Start with a strong hook to grab attention immediately
 - Keep it conversational, engaging, and shareable
 - Write in a casual, friendly tone
 - Make it punchy and viral-worthy
 - Add 1-2 emojis if they fit naturally
 
+CRITICAL HASHTAG REQUIREMENT:
+- You MUST generate exactly 2-3 hashtags at the very end
+- ALL hashtags MUST be directly related to the filename '{filename}' and the post content
+- Analyze the filename '{filename}' and create hashtags based on:
+  * The main topic/subject of the filename
+  * Key words or themes from the filename
+  * Related trending topics that match the filename context
+- NO generic hashtags
+- ONLY topic-specific hashtags that relate to '{filename}'
+- The hashtags should help people discover content about the same topic as '{filename}'
+
 STRUCTURE:
 - Hook (first line grabs attention)
-- Main message (concise and impactful)
-- 1-2 hashtags at the end
+- Main message (concise and impactful, related to '{filename}')
+- 2-3 hashtags at the end (MUST be related to filename '{filename}')
 
-IMPORTANT: Count characters carefully. The total must be UNDER 500 characters including all spaces, punctuation, and hashtags.
+IMPORTANT: Count characters carefully. The total must be UNDER 390 characters including all spaces, punctuation, and hashtags.
 
-Generate only the caption text, nothing else. Keep it short and powerful."""
+Generate only the caption text, nothing else. Keep it short and powerful. Remember: Hashtags MUST be generated based on the filename '{filename}'."""
             }
         }
         

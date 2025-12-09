@@ -146,9 +146,11 @@ class UnifiedSocialMediaUploader:
         """Generate platform-specific captions using Groq AI based on filename."""
         filename = os.path.splitext(file.name)[0].replace('_', ' ').replace('-', ' ')
         
+        # Check for API key with detailed logging
         groq_api_key = os.getenv('GROQ_API_KEY')
         if not groq_api_key:
-            self.send_message("⚠️ GROQ_API_KEY not found. Using fallback captions.", level=logging.WARNING, immediate=True)
+            self.send_message("⚠️ GROQ_API_KEY not found in environment variables. Using fallback captions.", level=logging.WARNING, immediate=True)
+            self.log_console_only("💡 To use AI captions, set GROQ_API_KEY environment variable", level=logging.INFO)
             fallback_caption = self.build_caption_from_filename(file)
             return {
                 'instagram': fallback_caption,
@@ -156,10 +158,14 @@ class UnifiedSocialMediaUploader:
                 'threads': fallback_caption
             }
         
+        self.log_console_only(f"🔑 GROQ_API_KEY found (length: {len(groq_api_key)})", level=logging.INFO)
+        
         try:
             groq_client = Groq(api_key=groq_api_key)
+            self.log_console_only("✅ Groq client initialized successfully", level=logging.INFO)
         except Exception as e:
-            self.send_message(f"❌ Failed to initialize Groq client: {e}", level=logging.ERROR, immediate=True)
+            self.send_message(f"❌ Failed to initialize Groq client: {type(e).__name__}: {e}", level=logging.ERROR, immediate=True)
+            self.log_console_only(f"❌ Full error details: {str(e)}", level=logging.ERROR)
             fallback_caption = self.build_caption_from_filename(file)
             return {
                 'instagram': fallback_caption,
@@ -225,39 +231,99 @@ Generate only the caption text, nothing else."""
         
         for platform, config in platforms.items():
             try:
-                self.log_console_only(f"🤖 Generating {platform} caption using AI...", level=logging.INFO)
+                self.log_console_only(f"🤖 Generating {platform} caption using AI for: '{filename}'...", level=logging.INFO)
+                self.send_message(f"🤖 Generating {platform} caption...", level=logging.INFO, immediate=True)
                 
-                response = groq_client.chat.completions.create(
-                    model="llama3-8b-8192",  # Fast, free tier friendly
-                    messages=[{"role": "user", "content": config['prompt']}],
-                    temperature=0.7,
-                    max_tokens=2000
-                )
-                
-                caption = response.choices[0].message.content.strip()
-                
-                # Remove any markdown formatting if present
-                caption = caption.replace('```', '').strip()
-                
-                # Truncate if over character limit (safety check)
-                if len(caption) > config['max_chars']:
-                    # Try to truncate at a word boundary near the limit
-                    truncated = caption[:config['max_chars']-50]
-                    last_space = truncated.rfind(' ')
-                    if last_space > 0:
-                        caption = truncated[:last_space] + "..."
-                    else:
-                        caption = truncated + "..."
-                
-                captions[platform] = caption
-                
-                preview = caption[:100] + "..." if len(caption) > 100 else caption
-                self.log_console_only(f"✅ AI generated {platform} caption ({len(caption)} chars): {preview}", level=logging.INFO)
+                # Make API call with better error handling
+                try:
+                    # Try multiple model names in case one doesn't work
+                    models_to_try = [
+                        "llama-3.1-8b-instant",  # Fast, recommended
+                        "llama3-8b-8192",  # Alternative name
+                        "llama-3.1-70b-versatile",  # More powerful fallback
+                    ]
+                    
+                    response = None
+                    last_error = None
+                    
+                    for model_name in models_to_try:
+                        try:
+                            self.log_console_only(f"🔄 Trying model: {model_name}", level=logging.INFO)
+                            response = groq_client.chat.completions.create(
+                                model=model_name,
+                                messages=[{"role": "user", "content": config['prompt']}],
+                                temperature=0.7,
+                                max_tokens=3000  # Increased for longer captions
+                            )
+                            self.log_console_only(f"✅ Successfully used model: {model_name}", level=logging.INFO)
+                            break  # Success, exit loop
+                        except Exception as model_error:
+                            last_error = model_error
+                            self.log_console_only(f"⚠️ Model {model_name} failed: {str(model_error)}", level=logging.WARNING)
+                            continue  # Try next model
+                    
+                    if response is None:
+                        raise Exception(f"All models failed. Last error: {str(last_error)}")
+                    
+                    # Validate response
+                    if not response or not response.choices:
+                        raise Exception("Empty response from Groq API")
+                    
+                    if not response.choices[0].message.content:
+                        raise Exception("No content in response")
+                    
+                    caption = response.choices[0].message.content.strip()
+                    
+                    # Validate caption is not empty
+                    if not caption or len(caption.strip()) == 0:
+                        raise Exception("Generated caption is empty")
+                    
+                    # Remove any markdown formatting if present
+                    caption = caption.replace('```', '').replace('```markdown', '').replace('```text', '').strip()
+                    
+                    # Remove leading/trailing quotes if AI added them
+                    if caption.startswith('"') and caption.endswith('"'):
+                        caption = caption[1:-1]
+                    if caption.startswith("'") and caption.endswith("'"):
+                        caption = caption[1:-1]
+                    
+                    # Truncate if over character limit (safety check)
+                    if len(caption) > config['max_chars']:
+                        # Try to truncate at a word boundary near the limit
+                        truncated = caption[:config['max_chars']-50]
+                        last_space = truncated.rfind(' ')
+                        if last_space > 0:
+                            caption = truncated[:last_space] + "..."
+                        else:
+                            caption = truncated + "..."
+                    
+                    captions[platform] = caption
+                    
+                    preview = caption[:150] + "..." if len(caption) > 150 else caption
+                    self.log_console_only(f"✅ AI generated {platform} caption ({len(caption)} chars): {preview}", level=logging.INFO)
+                    self.send_message(f"✅ {platform.capitalize()} caption generated ({len(caption)} chars)", level=logging.INFO, immediate=True)
+                    
+                except Exception as api_error:
+                    error_msg = f"{type(api_error).__name__}: {str(api_error)}"
+                    self.log_console_only(f"❌ Groq API call failed for {platform}: {error_msg}", level=logging.ERROR)
+                    self.send_message(f"❌ Groq AI failed for {platform}: {error_msg}", level=logging.ERROR, immediate=True)
+                    # Fallback to simple filename-based caption
+                    captions[platform] = self.build_caption_from_filename(file)
+                    self.log_console_only(f"⚠️ Using fallback caption for {platform}", level=logging.WARNING)
                 
             except Exception as e:
-                self.send_message(f"❌ Groq AI failed for {platform}: {e}", level=logging.ERROR, immediate=True)
+                error_msg = f"{type(e).__name__}: {str(e)}"
+                self.log_console_only(f"❌ Unexpected error for {platform}: {error_msg}", level=logging.ERROR)
+                self.send_message(f"❌ Error generating {platform} caption: {error_msg}", level=logging.ERROR, immediate=True)
                 # Fallback to simple filename-based caption
                 captions[platform] = self.build_caption_from_filename(file)
+        
+        # Final validation - check if we got any AI-generated captions
+        ai_generated_count = sum(1 for cap in captions.values() if cap != self.build_caption_from_filename(file))
+        if ai_generated_count == 0:
+            self.send_message("⚠️ No AI captions generated. All platforms using fallback captions.", level=logging.WARNING, immediate=True)
+        else:
+            self.send_message(f"✅ Successfully generated {ai_generated_count}/3 AI captions", level=logging.INFO, immediate=True)
         
         return captions
 
@@ -1165,6 +1231,51 @@ Generate only the caption text, nothing else."""
         
         return any(results.values())  # Return True if any platform succeeded
 
+    def test_groq_api(self):
+        """Test method to verify Groq API is working."""
+        self.log_console_only("🧪 Testing Groq API connection...", level=logging.INFO)
+        
+        groq_api_key = os.getenv('GROQ_API_KEY')
+        if not groq_api_key:
+            self.send_message("❌ GROQ_API_KEY not found in environment variables", level=logging.ERROR, immediate=True)
+            return False
+        
+        try:
+            groq_client = Groq(api_key=groq_api_key)
+            self.log_console_only("✅ Groq client initialized", level=logging.INFO)
+            
+            # Test with a simple prompt
+            test_prompt = "Generate a short 10-word caption about nature."
+            models_to_try = [
+                "llama-3.1-8b-instant",
+                "llama3-8b-8192",
+                "llama-3.1-70b-versatile",
+            ]
+            
+            for model_name in models_to_try:
+                try:
+                    self.log_console_only(f"🔄 Testing model: {model_name}", level=logging.INFO)
+                    response = groq_client.chat.completions.create(
+                        model=model_name,
+                        messages=[{"role": "user", "content": test_prompt}],
+                        max_tokens=50
+                    )
+                    
+                    if response and response.choices:
+                        result = response.choices[0].message.content.strip()
+                        self.send_message(f"✅ API Test Successful!\nModel: {model_name}\nResponse: {result}", level=logging.INFO, immediate=True)
+                        return True
+                except Exception as e:
+                    self.log_console_only(f"⚠️ Model {model_name} failed: {str(e)}", level=logging.WARNING)
+                    continue
+            
+            self.send_message("❌ All models failed. Check your API key and internet connection.", level=logging.ERROR, immediate=True)
+            return False
+            
+        except Exception as e:
+            self.send_message(f"❌ Groq API test failed: {type(e).__name__}: {str(e)}", level=logging.ERROR, immediate=True)
+            return False
+
     def run(self):
         """Main execution method."""
         self.log_console_only(f"📡 Run started: {datetime.now(self.ist).strftime('%Y-%m-%d %H:%M:%S')}", level=logging.INFO)
@@ -1197,5 +1308,13 @@ Generate only the caption text, nothing else."""
             self.log_console_only(f"🏁 Run complete in {duration:.1f} seconds", level=logging.INFO)
 
 if __name__ == "__main__":
-    UnifiedSocialMediaUploader().run()
+    import sys
+    
+    uploader = UnifiedSocialMediaUploader()
+    
+    # Allow testing API with: python script.py test
+    if len(sys.argv) > 1 and sys.argv[1].lower() == "test":
+        uploader.test_groq_api()
+    else:
+        uploader.run()
 

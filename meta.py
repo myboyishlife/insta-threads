@@ -175,67 +175,29 @@ class UnifiedSocialMediaUploader:
         
         platforms = {
             'instagram': {
-                'max_words': 350,
+                'max_words': 400,
                 'max_chars': 2000,  # Instagram's hard limit is 2,000 characters
                 'hashtag_count': '5-10',
-                'prompt': f"""Generate an engaging Instagram caption for content titled '{filename}' in Facebook-style format with a hook and descriptive narrative.
+                'prompt': f"""Write a Facebook-style Instagram caption (≤2,000 characters, about 400 words) for '{filename}'.
 
-CRITICAL REQUIREMENTS:
-- ABSOLUTE MAXIMUM: 2,000 characters total (including hashtags, spaces, and all text) - Instagram's hard limit
-- Maximum 350 words (approximately 2,000 characters total including hashtags)
-- End with exactly 5-10 relevant trending hashtags that are TOTALLY RELATED to the filename and content topic
-- Add emojis strategically throughout the caption (not just at the end)
-- Write in a friendly, conversational storytelling style (like Facebook posts)
-- All content must be directly related to the filename '{filename}'
+Requirements:
+- Friendly, conversational storytelling (like a Facebook post)
+- Start with a strong hook opening the story naturally
+- Tell a descriptive, emotional story fully related to the filename
+- Add value/insight and relatable details
+- Sprinkle emojis naturally (not all at the end)
+- End with exactly 5-10 topic-specific, non-generic hashtags
+- Finish with a call-to-action question to drive comments (e.g., "What would you do?", "Share your thoughts below")
+- Everything must stay under 2,000 characters including spaces/emojis/hashtags
 
-MANDATORY STRUCTURE (follow this exact format):
+Flow to follow (do NOT label the sections, just write the caption):
+- Hooky first line that makes people keep reading
+- Descriptive story that provides context (what happened, who, where) with emotional, relatable details
+- Engagement element with a question that invites replies
+- Call-to-action question at the end
+- Hashtags at the very end (5-10, all tightly related to the filename/topic; no generic tags)
 
-1. HOOK (First line - must grab attention):
-   - Start with a powerful, attention-grabbing opening line
-   - Use a quote, shocking statement, intriguing question, or dramatic opening
-   - Example: "He married an orphan girl he found on a train…" or "This story will restore your faith in humanity…" or similar hook
-   - Make it compelling and make people want to read more
-
-2. DESCRIPTIVE NARRATIVE (Main body - 3-5 paragraphs):
-   - Tell the complete story/narrative related to the filename '{filename}'
-   - Use storytelling style with engaging narrative
-   - Provide context: what happened, who was involved, where it occurred
-   - Build the narrative with emotional details and relatable elements
-   - Include specific events, actions, and outcomes
-   - Make it informative, shareable, and valuable
-   - Add emojis naturally within the text (👉 🔹 ⚠️ ❤️ 💭 etc.)
-   - Use phrases like "The story of...", "According to...", "As the story goes..."
-
-3. ENGAGEMENT ELEMENTS (1-2 paragraphs):
-   - Include thought-provoking questions to encourage engagement
-   - Add value through insights, tips, or information
-   - Use engagement hooks like "What do you think?", "Share your thoughts below"
-   - Reference relatable experiences
-   - Encourage comments and discussion
-
-4. HASHTAGS (at the very end):
-   - Exactly 5-10 hashtags
-   - ALL hashtags must be TOTALLY RELATED to the filename '{filename}' and the story content
-   - Use trending, relevant hashtags based on the topic
-   - No generic hashtags - only topic-specific ones
-
-CONTENT STRATEGIES:
-- EMOTIONAL STORYTELLING: Create a narrative that connects emotionally with the audience
-- ENGAGEMENT HOOKS: Use phrases to encourage shares and comments
-- CONVERSATIONAL TONE: Write in a friendly, relatable style (like Facebook posts)
-- VALUE-ADDED: Make it informative and shareable
-- RELATABLE: Reference experiences people can connect with
-
-IMPORTANT: 
-- The entire caption must be based on and related to the filename '{filename}'
-- Start with a strong hook, then flow into descriptive narrative
-- Write in Facebook-style: friendly, conversational, storytelling
-- All hashtags must be directly related to the filename topic
-- Use emojis naturally throughout (not just at the end)
-- CRITICAL: Count characters carefully - Instagram will reject captions over 2,000 characters
-- The total character count including all text, spaces, emojis, and hashtags MUST be 2,000 or less
-
-Generate only the caption text, nothing else. Format: Hook → Descriptive Story → Engagement → Hashtags."""
+Generate only the caption text (no section labels, no extra notes). Keep it concise, under 2,000 characters total, and fully tied to the filename topic."""
             },
             'facebook': {
                 'max_words': 1000,
@@ -1569,4 +1531,3 @@ if __name__ == "__main__":
         uploader.test_groq_api()
     else:
         uploader.run()
-

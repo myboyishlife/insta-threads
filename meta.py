@@ -9,6 +9,7 @@ from datetime import datetime
 from pytz import timezone
 import random
 import re
+from groq import Groq
 
 class UnifiedSocialMediaUploader:
     DROPBOX_TOKEN_URL = "https://api.dropbox.com/oauth2/token"
@@ -136,10 +137,129 @@ class UnifiedSocialMediaUploader:
             return []
 
     def build_caption_from_filename(self, file):
-        """Use filename as caption."""
+        """Use filename as caption (fallback method)."""
         base_name = os.path.splitext(file.name)[0]
         base_name = base_name.replace('_', ' ')
         return base_name
+
+    def build_ai_caption_from_filename(self, file):
+        """Generate platform-specific captions using Groq AI based on filename."""
+        filename = os.path.splitext(file.name)[0].replace('_', ' ').replace('-', ' ')
+        
+        groq_api_key = os.getenv('GROQ_API_KEY')
+        if not groq_api_key:
+            self.send_message("⚠️ GROQ_API_KEY not found. Using fallback captions.", level=logging.WARNING, immediate=True)
+            fallback_caption = self.build_caption_from_filename(file)
+            return {
+                'instagram': fallback_caption,
+                'facebook': fallback_caption,
+                'threads': fallback_caption
+            }
+        
+        try:
+            groq_client = Groq(api_key=groq_api_key)
+        except Exception as e:
+            self.send_message(f"❌ Failed to initialize Groq client: {e}", level=logging.ERROR, immediate=True)
+            fallback_caption = self.build_caption_from_filename(file)
+            return {
+                'instagram': fallback_caption,
+                'facebook': fallback_caption,
+                'threads': fallback_caption
+            }
+        
+        platforms = {
+            'instagram': {
+                'max_words': 500,
+                'max_chars': 3000,  # ~500 words * 6 chars per word
+                'hashtag_count': '5-10',
+                'prompt': f"""Generate an engaging Instagram caption for content titled '{filename}'.
+
+Requirements:
+- Make it descriptive, exciting, and engaging
+- Add relevant emojis throughout
+- Maximum 500 words (approximately 3000 characters)
+- End with 5-10 relevant trending hashtags based on the content topic
+- Focus on trends, excitement, and visual appeal
+- Write in a conversational, engaging style
+- Do not exceed the word or character limit
+
+Generate only the caption text, nothing else."""
+            },
+            'facebook': {
+                'max_words': 1000,
+                'max_chars': 6000,  # ~1000 words * 6 chars per word
+                'hashtag_count': '5-8',
+                'prompt': f"""Create a detailed Facebook post caption for content titled '{filename}'.
+
+Requirements:
+- Use storytelling style with engaging narrative
+- Include questions to encourage engagement
+- Maximum 1000 words (approximately 6000 characters)
+- Add 5-8 targeted hashtags at the end based on the content topic
+- Make it informative and shareable
+- Write in a friendly, conversational tone
+- Do not exceed the word or character limit
+
+Generate only the caption text, nothing else."""
+            },
+            'threads': {
+                'max_words': 300,
+                'max_chars': 1500,  # ~300 words * 5 chars per word
+                'hashtag_count': '3-5',
+                'prompt': f"""Write a concise Threads post for content titled '{filename}'.
+
+Requirements:
+- Start with a strong hook to grab attention
+- Keep it conversational and engaging
+- Maximum 300 words (approximately 1500 characters)
+- Include 3-5 trending hashtags based on the topic
+- Make it punchy and shareable
+- Write in a casual, friendly tone
+- Do not exceed the word or character limit
+
+Generate only the caption text, nothing else."""
+            }
+        }
+        
+        captions = {}
+        
+        for platform, config in platforms.items():
+            try:
+                self.log_console_only(f"🤖 Generating {platform} caption using AI...", level=logging.INFO)
+                
+                response = groq_client.chat.completions.create(
+                    model="llama3-8b-8192",  # Fast, free tier friendly
+                    messages=[{"role": "user", "content": config['prompt']}],
+                    temperature=0.7,
+                    max_tokens=2000
+                )
+                
+                caption = response.choices[0].message.content.strip()
+                
+                # Remove any markdown formatting if present
+                caption = caption.replace('```', '').strip()
+                
+                # Truncate if over character limit (safety check)
+                if len(caption) > config['max_chars']:
+                    # Try to truncate at a word boundary near the limit
+                    truncated = caption[:config['max_chars']-50]
+                    last_space = truncated.rfind(' ')
+                    if last_space > 0:
+                        caption = truncated[:last_space] + "..."
+                    else:
+                        caption = truncated + "..."
+                
+                captions[platform] = caption
+                
+                preview = caption[:100] + "..." if len(caption) > 100 else caption
+                self.log_console_only(f"✅ AI generated {platform} caption ({len(caption)} chars): {preview}", level=logging.INFO)
+                
+            except Exception as e:
+                self.send_message(f"❌ Groq AI failed for {platform}: {e}", level=logging.ERROR, immediate=True)
+                # Fallback to simple filename-based caption
+                captions[platform] = self.build_caption_from_filename(file)
+        
+        return captions
 
     def get_page_access_token(self):
         """Fetch Facebook Page Access Token."""
@@ -963,8 +1083,13 @@ class UnifiedSocialMediaUploader:
         total_files = len(files)  # Cache total files count
         self.log_console_only(f"🎯 Processing: {file.name}", level=logging.INFO)
         
-        # Build caption from filename for all platforms
-        caption = self.build_caption_from_filename(file)
+        # Generate AI-powered captions for each platform
+        self.send_message(f"🤖 Generating AI captions for: {file.name}", level=logging.INFO, immediate=True)
+        captions = self.build_ai_caption_from_filename(file)
+        
+        caption_instagram = captions.get('instagram', self.build_caption_from_filename(file))
+        caption_facebook = captions.get('facebook', self.build_caption_from_filename(file))
+        caption_threads = captions.get('threads', self.build_caption_from_filename(file))
         
         results = {
             'instagram': False,
@@ -985,14 +1110,14 @@ class UnifiedSocialMediaUploader:
                     self.send_message("❌ Instagram not properly connected. Aborting Instagram.", level=logging.ERROR, immediate=True)
                     results['instagram'] = False
                 else:
-                    # Post to Instagram
-                    results['instagram'] = self.post_to_instagram(dbx, file, caption, page_token, total_files)
+                    # Post to Instagram with platform-specific caption
+                    results['instagram'] = self.post_to_instagram(dbx, file, caption_instagram, page_token, total_files)
                 
-                # Post to Facebook
-                results['facebook'] = self.post_to_facebook_page(dbx, file, caption, page_token)
+                # Post to Facebook with platform-specific caption
+                results['facebook'] = self.post_to_facebook_page(dbx, file, caption_facebook, page_token)
             
-            # Post to Threads
-            thread_id = self.post_to_threads(dbx, file, caption, total_files)
+            # Post to Threads with platform-specific caption
+            thread_id = self.post_to_threads(dbx, file, caption_threads, total_files)
             if thread_id and thread_id != 'Unknown':
                 results['threads'] = True
                 # Verify Threads post is live

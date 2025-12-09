@@ -178,33 +178,73 @@ class UnifiedSocialMediaUploader:
                 'max_words': 500,
                 'max_chars': 3000,  # ~500 words * 6 chars per word
                 'hashtag_count': '5-10',
-                'prompt': f"""Generate a highly engaging, viral-worthy Instagram caption for content titled '{filename}' that maximizes engagement and reach.
+                'prompt': f"""Generate a long-form, story-driven Instagram caption for content titled '{filename}' that tells a compelling narrative and maximizes engagement.
 
 CRITICAL REQUIREMENTS:
 - Maximum 500 words (approximately 3000 characters total including hashtags)
-- End with exactly 5-10 relevant trending hashtags
+- End with exactly 5-10 relevant trending hashtags that are TOTALLY RELATED to the filename and content topic
 - Add emojis strategically throughout the caption (not just at the end)
-- Write in a conversational, engaging style
+- Write in a conversational, journalistic storytelling style
+- All content must be directly related to the filename '{filename}'
 
-CONTENT STRATEGIES (use multiple):
-1. MOTIVATIONAL CONTENT: Include inspiring, uplifting messages that motivate and empower
-2. EMOTIONAL STORYTELLING: Create an emotional narrative that connects with the audience
-3. COMMENT BAIT QUESTIONS: Add thought-provoking questions that encourage comments (e.g., "What do you think?", "Have you experienced this?", "Drop a ❤️ if you agree")
-4. CONTROVERSY: Include mildly controversial or debatable points that spark discussion (keep it respectful)
-5. VIRAL MORAL DILEMMA: Present a moral question or dilemma that makes people think and share their opinions
-6. TREND JACKING: Reference current trends, memes, or popular topics when relevant
-7. LONG READ CAPTION: Make it substantial and valuable - people love detailed, informative captions
-8. ENGAGEMENT HOOKS: Use phrases like "Save this post", "Share with someone who needs this", "Double tap if..."
+MANDATORY STRUCTURE (follow this exact format):
 
-STRUCTURE:
-- Start with a strong hook (first line should grab attention)
-- Build emotional connection through storytelling
-- Add motivational/empowering message
-- Include engagement questions
-- Add emojis throughout (not just at end)
-- End with 5-10 trending hashtags
+1. HOOK (First 1-2 lines):
+   - Start with a powerful, attention-grabbing opening line
+   - Use a quote, shocking statement, or intriguing question
+   - Example: "He married an orphan girl he found on a train…" or similar hook
 
-Generate only the caption text, nothing else. Make it compelling and shareable."""
+2. STORY BACKGROUND (2-3 paragraphs):
+   - Provide context about the story/topic from the filename
+   - Explain what happened, who was involved, where it occurred
+   - Build the narrative with emotional details
+   - Use phrases like "The story of...", "As the viral story goes:", "According to posts circulating online"
+
+3. STORY NARRATIVE (2-3 paragraphs):
+   - Tell the complete story in detail
+   - Include specific events, actions, and outcomes
+   - Make it engaging and relatable
+   - Add emojis naturally within the text (👉 🔹 ⚠️ ❤️ etc.)
+
+4. DISCUSSION & ENGAGEMENT (1-2 paragraphs):
+   - Present thought-provoking questions using 👉 emoji
+   - Create moral dilemmas or controversial points
+   - Ask: "People are now asking:" followed by questions
+   - Examples: "Was this an act of extraordinary kindness?" "Or was the decision too sudden?"
+
+5. REALITY CHECK/WARNING (1 paragraph):
+   - Include a section with ⚠️ emoji titled "Important Reality Check" or similar
+   - Add critical thinking elements
+   - Use phrases like "So far, no trusted news outlet has confirmed..." or "It appears to be circulating only through..."
+   - Include 🔹 bullet points for key facts
+   - End with: "In an era where emotional stories spread faster than facts, it is crucial to verify before sharing."
+
+6. ENGAGEMENT HOOKS:
+   - Add phrases like "Save this post", "Share your thoughts below", "Double tap if you agree"
+   - Encourage comments and discussion
+
+7. HASHTAGS (at the very end):
+   - Exactly 5-10 hashtags
+   - ALL hashtags must be TOTALLY RELATED to the filename '{filename}' and the story content
+   - Use trending, relevant hashtags based on the topic
+   - No generic hashtags - only topic-specific ones
+
+CONTENT STRATEGIES:
+- EMOTIONAL STORYTELLING: Create a narrative that connects emotionally
+- VIRAL MORAL DILEMMA: Present questions that make people think
+- CONTROVERSY: Include debatable points that spark discussion
+- REALITY CHECK: Add verification warnings when appropriate
+- TREND JACKING: Reference current trends if relevant to the filename
+- LONG READ CAPTION: Make it substantial (400-500 words)
+
+IMPORTANT: 
+- The entire caption must be based on and related to the filename '{filename}'
+- Generate a complete story/narrative related to the filename
+- All hashtags must be directly related to the filename topic
+- Use emojis naturally throughout (not just at the end)
+- Write in a journalistic, storytelling style
+
+Generate only the caption text, nothing else. Make it a complete, engaging long-form story."""
             },
             'facebook': {
                 'max_words': 1000,

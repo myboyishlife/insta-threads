@@ -175,79 +175,36 @@ class UnifiedSocialMediaUploader:
         
         platforms = {
             'instagram': {
-                'max_words': 400,
-                'max_chars': 2000,  # Instagram's hard limit is 2,200 characters
+                'max_words': 500,
+                'max_chars': 3000,  # ~500 words * 6 chars per word
                 'hashtag_count': '5-10',
-                'prompt': f"""Generate a long-form, story-driven Instagram caption for content titled '{filename}' that tells a compelling narrative and maximizes engagement.
+                'prompt': f"""Generate a highly engaging, viral-worthy Instagram caption for content titled '{filename}' that maximizes engagement and reach.
 
 CRITICAL REQUIREMENTS:
-- ABSOLUTE MAXIMUM: 2,000 characters total (including hashtags, spaces, and all text) - Instagram's hard limit
-- Maximum 400 words (approximately 2,000 characters total including hashtags)
-- End with exactly 5-10 relevant trending hashtags that are TOTALLY RELATED to the filename and content topic
+- Maximum 500 words (approximately 3000 characters total including hashtags)
+- End with exactly 5-10 relevant trending hashtags
 - Add emojis strategically throughout the caption (not just at the end)
-- Write in a conversational, journalistic storytelling style
-- All content must be directly related to the filename '{filename}'
+- Write in a conversational, engaging style
 
-MANDATORY STRUCTURE (follow this exact format):
+CONTENT STRATEGIES (use multiple):
+1. MOTIVATIONAL CONTENT: Include inspiring, uplifting messages that motivate and empower
+2. EMOTIONAL STORYTELLING: Create an emotional narrative that connects with the audience
+3. COMMENT BAIT QUESTIONS: Add thought-provoking questions that encourage comments (e.g., "What do you think?", "Have you experienced this?", "Drop a ❤️ if you agree")
+4. CONTROVERSY: Include mildly controversial or debatable points that spark discussion (keep it respectful)
+5. VIRAL MORAL DILEMMA: Present a moral question or dilemma that makes people think and share their opinions
+6. TREND JACKING: Reference current trends, memes, or popular topics when relevant
+7. LONG READ CAPTION: Make it substantial and valuable - people love detailed, informative captions
+8. ENGAGEMENT HOOKS: Use phrases like "Save this post", "Share with someone who needs this", "Double tap if..."
 
-1. HOOK (First 1-2 lines):
-   - Start with a powerful, attention-grabbing opening line
-   - Use a quote, shocking statement, or intriguing question
-   - Example: "He married an orphan girl he found on a train…" or similar hook
+STRUCTURE:
+- Start with a strong hook (first line should grab attention)
+- Build emotional connection through storytelling
+- Add motivational/empowering message
+- Include engagement questions
+- Add emojis throughout (not just at end)
+- End with 5-10 trending hashtags
 
-2. STORY BACKGROUND (2-3 paragraphs):
-   - Provide context about the story/topic from the filename
-   - Explain what happened, who was involved, where it occurred
-   - Build the narrative with emotional details
-   - Use phrases like "The story of...", "As the viral story goes:", "According to posts circulating online"
-
-3. STORY NARRATIVE (2-3 paragraphs):
-   - Tell the complete story in detail
-   - Include specific events, actions, and outcomes
-   - Make it engaging and relatable
-   - Add emojis naturally within the text (👉 🔹 ⚠️ ❤️ etc.)
-
-4. DISCUSSION & ENGAGEMENT (1-2 paragraphs):
-   - Present thought-provoking questions using 👉 emoji
-   - Create moral dilemmas or controversial points
-   - Ask: "People are now asking:" followed by questions
-   - Examples: "Was this an act of extraordinary kindness?" "Or was the decision too sudden?"
-
-5. REALITY CHECK/WARNING (1 paragraph):
-   - Include a section with ⚠️ emoji titled "Important Reality Check" or similar
-   - Add critical thinking elements
-   - Use phrases like "So far, no trusted news outlet has confirmed..." or "It appears to be circulating only through..."
-   - Include 🔹 bullet points for key facts
-   - End with: "In an era where emotional stories spread faster than facts, it is crucial to verify before sharing."
-
-6. ENGAGEMENT HOOKS:
-   - Add phrases like "Save this post", "Share your thoughts below", "Double tap if you agree"
-   - Encourage comments and discussion
-
-7. HASHTAGS (at the very end):
-   - Exactly 5-10 hashtags
-   - ALL hashtags must be TOTALLY RELATED to the filename '{filename}' and the story content
-   - Use trending, relevant hashtags based on the topic
-   - No generic hashtags - only topic-specific ones
-
-CONTENT STRATEGIES:
-- EMOTIONAL STORYTELLING: Create a narrative that connects emotionally
-- VIRAL MORAL DILEMMA: Present questions that make people think
-- CONTROVERSY: Include debatable points that spark discussion
-- REALITY CHECK: Add verification warnings when appropriate
-- TREND JACKING: Reference current trends if relevant to the filename
-- LONG READ CAPTION: Make it substantial but within 2,000 character limit (approximately 350-400 words)
-
-IMPORTANT: 
-- The entire caption must be based on and related to the filename '{filename}'
-- Generate a complete story/narrative related to the filename
-- All hashtags must be directly related to the filename topic
-- Use emojis naturally throughout (not just at the end)
-- Write in a journalistic, storytelling style
-- CRITICAL: Count characters carefully - Instagram will reject captions over 2,000 characters
-- The total character count including all text, spaces, emojis, and hashtags MUST be 2,000 or less
-
-Generate only the caption text, nothing else. Make it a complete, engaging long-form story."""
+Generate only the caption text, nothing else. Make it compelling and shareable."""
             },
             'facebook': {
                 'max_words': 1000,
@@ -329,7 +286,7 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                             elif platform == 'facebook':
                                 max_tokens = 4000  # Higher for Facebook (longer content)
                             else:
-                                max_tokens = 2500  # Instagram (reduced to match 2,200 char limit)
+                                max_tokens = 3000  # Instagram
                             
                             response = groq_client.chat.completions.create(
                                 model=model_name,
@@ -369,7 +326,7 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                     if caption.startswith("'") and caption.endswith("'"):
                         caption = caption[1:-1]
                     
-                    # Strict character limit enforcement (especially for Threads and Instagram)
+                    # Strict character limit enforcement (especially for Threads)
                     if platform == 'threads':
                         # Threads has strict 500 character limit - be very conservative
                         max_allowed = 450  # Leave buffer for safety
@@ -393,39 +350,8 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                                 caption = caption[:495].rstrip()
                             
                             self.log_console_only(f"⚠️ Threads caption truncated to {len(caption)} chars (limit: 500)", level=logging.WARNING)
-                    elif platform == 'instagram':
-                        # Instagram has strict 2,000 character limit - be conservative
-                        max_allowed = 1900  # Leave buffer for safety (2000 - 100)
-                        if len(caption) > max_allowed:
-                            # Truncate at word boundary, try to preserve hashtags
-                            truncated = caption[:max_allowed-20]
-                            last_space = truncated.rfind(' ')
-                            last_hashtag = truncated.rfind('#')
-                            
-                            # Try to preserve hashtags if they're near the end
-                            if last_hashtag > last_space and last_hashtag > max_allowed - 100:
-                                # Keep hashtags, truncate before them
-                                main_text = truncated[:last_hashtag].rstrip()
-                                hashtags = caption[last_hashtag:]
-                                # Ensure total is under limit
-                                if len(main_text) + len(hashtags) <= 2000:
-                                    caption = main_text + " " + hashtags
-                                else:
-                                    # Hashtags too long, truncate them too
-                                    available = 2000 - len(main_text) - 1
-                                    caption = main_text + " " + hashtags[:available].rstrip()
-                            elif last_space > 0:
-                                caption = truncated[:last_space].rstrip()
-                            else:
-                                caption = truncated.rstrip()
-                            
-                            # Final safety check - must be under 2,000
-                            if len(caption) >= 2000:
-                                caption = caption[:1995].rstrip()
-                            
-                            self.log_console_only(f"⚠️ Instagram caption truncated to {len(caption)} chars (limit: 2,000)", level=logging.WARNING)
                     elif len(caption) > config['max_chars']:
-                        # For other platforms (Facebook), truncate at word boundary
+                        # For other platforms, truncate at word boundary
                         truncated = caption[:config['max_chars']-50]
                         last_space = truncated.rfind(' ')
                         if last_space > 0:
@@ -437,11 +363,6 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                     if platform == 'threads' and len(caption) >= 500:
                         self.log_console_only(f"⚠️ Threads caption still too long ({len(caption)} chars), forcing truncation", level=logging.WARNING)
                         caption = caption[:495].rstrip()
-                    
-                    # Final validation for Instagram - must be under 2,000
-                    if platform == 'instagram' and len(caption) >= 2000:
-                        self.log_console_only(f"⚠️ Instagram caption still too long ({len(caption)} chars), forcing truncation", level=logging.WARNING)
-                        caption = caption[:1995].rstrip()
                     
                     captions[platform] = caption
                     
@@ -488,30 +409,6 @@ Generate only the caption text, nothing else. Keep it short and powerful."""
                     captions['threads'] = threads_caption[:495].rstrip()
                 
                 self.log_console_only(f"✅ Threads caption fixed: {len(captions['threads'])} chars", level=logging.INFO)
-        
-        # CRITICAL: Final validation for Instagram character limit
-        if 'instagram' in captions:
-            instagram_caption = captions['instagram']
-            if len(instagram_caption) >= 2000:
-                self.log_console_only(f"⚠️ CRITICAL: Instagram caption exceeds limit ({len(instagram_caption)} chars). Forcing truncation.", level=logging.ERROR)
-                # Aggressively truncate
-                instagram_caption = instagram_caption[:1950].rstrip()
-                # Try to preserve hashtags if they exist
-                last_hashtag = instagram_caption.rfind('#')
-                if last_hashtag > 1900:
-                    # Hashtags are near the end, keep them
-                    main_text = instagram_caption[:last_hashtag].rstrip()
-                    hashtags = instagram_caption[last_hashtag:]
-                    if len(main_text) + len(hashtags) < 2000:
-                        captions['instagram'] = main_text + " " + hashtags
-                    else:
-                        # Hashtags too long, truncate them too
-                        available = 2000 - len(main_text) - 1
-                        captions['instagram'] = main_text + " " + hashtags[:available].rstrip()
-                else:
-                    captions['instagram'] = instagram_caption[:1995].rstrip()
-                
-                self.log_console_only(f"✅ Instagram caption fixed: {len(captions['instagram'])} chars", level=logging.INFO)
         
         if ai_generated_count == 0:
             self.send_message("⚠️ No AI captions generated. All platforms using fallback captions.", level=logging.WARNING, immediate=True)

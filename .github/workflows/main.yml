@@ -1,7 +1,6 @@
 name: Unified Social Media Uploader
 
 on:
-on:
   schedule:
     - cron: "0 1 * * *"    # 01:00 UTC = 06:30 AM IST (Morning: Threads/Instagram)
     - cron: "0 6 * * *"    # 06:00 UTC = 11:30 AM IST (Midday: Facebook)

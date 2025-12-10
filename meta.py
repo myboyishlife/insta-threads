@@ -181,6 +181,7 @@ class UnifiedSocialMediaUploader:
                 'prompt': f"""Write a Facebook-style Instagram caption (≤1,800 characters, about 350-360 words) for '{filename}' with clear paragraphs and emojis. Mix motivational + emotional in a positive way that gives hope.
 
 Requirements:
+- Write in third person, referring to the creator as “they” or “this person”, never using “I”, “me”, “my”, or “we”
 - Friendly, conversational storytelling (like a Facebook post)
 - Use MULTIPLE short paragraphs with blank lines between them (do NOT make one big block)
 - Start with a strong hook opening the story naturally
@@ -220,6 +221,7 @@ Generate only the caption text (no section labels, no extra notes). Keep it unde
                 'prompt': f"""Create a detailed, engaging Facebook-style caption for '{filename}' that encourages shares and comments, in multiple short paragraphs with emojis. Mix motivational + emotional in a positive, hopeful way.
 
 CRITICAL REQUIREMENTS:
+- Use only third‑person references (they / them / this person), and never use first‑person words like “I”, “me”, “my”, or “we”
 - Maximum 3,000 characters total (including hashtags)
 - Aim ~480 words (but stay under 2,000 chars)
 - End with exactly 5-10 targeted, topic-specific hashtags (no generic tags)
@@ -246,6 +248,7 @@ Generate only the caption text."""
                 'prompt': f"""Write a concise, hopeful Threads post for '{filename}' (≤390 characters). Tone: motivational + emotional in a positive way. Include 2-3 topic-specific hashtags.
 
 CRITICAL REQUIREMENTS:
+- Always write in third person (“they / them / this person”), never in first person (“I / me / my / we”)
 - ABSOLUTE MAXIMUM: 390 characters total (including hashtags and spaces)
 - Start with a strong hook to grab attention immediately
 - Keep it conversational, engaging, and shareable

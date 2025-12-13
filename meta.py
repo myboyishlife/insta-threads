@@ -178,19 +178,20 @@ class UnifiedSocialMediaUploader:
                 'max_words': 360,
                 'max_chars': 1800,  # Instagram target cap: 1,800 characters
                 'hashtag_count': '5-10',
-                'prompt': f"""Write a Facebook-style Instagram caption (≤1,800 characters, about 350-360 words) for '{filename}' with clear paragraphs and emojis. Mix motivational + emotional in a positive way that gives hope.
+                'prompt': f"""Act as a poetic Instagram storyteller (2M+ followers) crafting aesthetic captions. Write a Facebook-style Instagram caption (≤1,800 chars, 350-360 words) for '{filename}' using ONLY poetic, aesthetic language derived purely from this filename's essence.
 
 Requirements:
 - Write in third person, referring to the creator as “they” or “this person”, never using “I”, “me”, “my”, or “we”
 - Friendly, conversational storytelling (like a Facebook post)
 - Use MULTIPLE short paragraphs with blank lines between them (do NOT make one big block)
-- Start with a strong hook opening the story naturally
+- Strong hook; evocative story tied EXCLUSIVELY to '{filename}'; insightful close
 - Tell a descriptive, emotional story fully related to the filename '{filename}'
 - Add value/insight and relatable details
 - Sprinkle emojis naturally in each paragraph (not all at the end)
-- Finish with a call-to-action question to drive comments (e.g., "What would you do?", "Share your thoughts below")
+- CTA question drawing from filename themes
 - Everything must stay under 1,800 characters including spaces/emojis/hashtags
-- Tone: motivational + emotional + hopeful
+- Aesthetic, lyrical tone: metaphors, sensory details, rhythmic flow from '{filename}'
+- NO clichés/generic phrases—create ORIGINAL poetic imagery from '{filename}' words/themes ONLY
 
 CRITICAL HASHTAG REQUIREMENT:
 - You MUST generate exactly 5-10 hashtags at the very end
@@ -200,6 +201,7 @@ CRITICAL HASHTAG REQUIREMENT:
   * Key words or themes from the filename
   * Related trending topics that match the filename context
 - NO generic hashtags like #love #instagood #photooftheday
+- Lyrical, sensory storytelling with filename-derived metaphors/rhythm
 - ONLY topic-specific hashtags that relate to '{filename}'
 - Examples: If filename is "train journey story", hashtags should be like #trainjourney #travelstory #railway #journey #adventure (all related to trains/journeys)
 - The hashtags should help people discover content about the same topic as '{filename}'
@@ -218,26 +220,27 @@ Generate only the caption text (no section labels, no extra notes). Keep it unde
                 'max_words': 480,
                 'max_chars': 3000,  # Facebook target cap: 2,000 characters
                 'hashtag_count': '5-10',
-                'prompt': f"""Create a detailed, engaging Facebook-style caption for '{filename}' that encourages shares and comments, in multiple short paragraphs with emojis. Mix motivational + emotional in a positive, hopeful way.
+                'prompt': f"""Act as a lyrical Facebook poet (2M+ followers) weaving aesthetic narratives. Create detailed Facebook caption for '{filename}' (≤2,000 chars, ~450 words) using poetic language drawn PURELY from filename essence.
 
 CRITICAL REQUIREMENTS:
 - Use only third‑person references (they / them / this person), and never use first‑person words like “I”, “me”, “my”, or “we”
 - Maximum 3,000 characters total (including hashtags)
 - Aim ~480 words (but stay under 2,000 chars)
 - End with exactly 5-10 targeted, topic-specific hashtags (no generic tags)
-- Use storytelling style with engaging narrative
+- Lyrical, sensory storytelling with filename-derived metaphors/rhythm
+- NO clichés—ORIGINAL poetic expressions from '{filename}' themes/words ONLY
 - Include questions to encourage engagement
 - Add emojis strategically throughout paragraphs
 - Make it informative, shareable, and valuable
-- Write in a friendly, conversational tone
+- Hook; emotional filename journey; wisdom; 2 engagement questions
 - Do not exceed the character limit
 
 STRUCTURE (no labels, just text):
 - Hooky first line
-- 3–5 short paragraphs, 2–4 sentences each, separated by blank lines
+- 3–5 short paragraphs, 2–4 sentences each, separated by blank lines, 4-6 lyrical paragraphs
 - Emotional storytelling + relatable details
 - Engagement questions + call to action at the end
-- Hashtags last (5-10, topic-specific)
+- Hashtags last (5-10, topic-specific) (NO generics)
 
 Generate only the caption text."""
             },
@@ -245,14 +248,14 @@ Generate only the caption text."""
                 'max_words': 90,  # to target ~390 chars
                 'max_chars': 390,  # Strict limit per requirement
                 'hashtag_count': '2-3',
-                'prompt': f"""Write a concise, hopeful Threads post for '{filename}' (≤390 characters). Tone: motivational + emotional in a positive way. Include 2-3 topic-specific hashtags.
+                'prompt': f"""Act as poetic Threads whisperer. Craft aesthetic Threads post for '{filename}' (≤390 chars) using poetic essence from filename ONLY.
 
 CRITICAL REQUIREMENTS:
 - Always write in third person (“they / them / this person”), never in first person (“I / me / my / we”)
 - ABSOLUTE MAXIMUM: 390 characters total (including hashtags and spaces)
 - Start with a strong hook to grab attention immediately
 - Keep it conversational, engaging, and shareable
-- Write in a casual, friendly tone
+- Lyrical, condensed poetry (under 390 chars total)
 - Make it punchy and viral-worthy
 - Add 1-2 emojis if they fit naturally
 
@@ -264,6 +267,7 @@ CRITICAL HASHTAG REQUIREMENT:
   * Key words or themes from the filename
   * Related trending topics that match the filename context
 - NO generic hashtags
+- Hook + poetic essence + 2-3 '{filename}' hashtags
 - ONLY topic-specific hashtags that relate to '{filename}'
 - The hashtags should help people discover content about the same topic as '{filename}'
 

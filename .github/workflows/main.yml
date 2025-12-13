@@ -6,6 +6,8 @@ on:
     - cron: "0 6 * * *"    # 06:00 UTC = 11:30 AM IST (Midday: Facebook)
     - cron: "0 12 * * *"   # 12:00 UTC = 05:30 PM IST (Afternoon: All platforms)
     - cron: "0 14 * * *"   # 14:00 UTC = 07:30 PM IST (Evening: Instagram peak)
+    - cron: "0 18 * * *"
+    
   workflow_dispatch:
 
 jobs:

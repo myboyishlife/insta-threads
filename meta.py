@@ -182,7 +182,6 @@ class UnifiedSocialMediaUploader:
 
 Requirements:
 - Write in third person, referring to the creator as “they” or “this person”, never using “I”, “me”, “my”, or “we”
-- Friendly, conversational storytelling (like a Facebook post)
 - Use MULTIPLE short paragraphs with blank lines between them (do NOT make one big block)
 - Strong hook; evocative story tied EXCLUSIVELY to '{filename}'; insightful close
 - Tell a descriptive, emotional story fully related to the filename '{filename}'

@@ -202,7 +202,6 @@ CRITICAL HASHTAG REQUIREMENT:
 - NO generic hashtags like #love #instagood #photooftheday
 - Lyrical, sensory storytelling with filename-derived metaphors/rhythm
 - ONLY topic-specific hashtags that relate to '{filename}'
-- Examples: If filename is "train journey story", hashtags should be like #trainjourney #travelstory #railway #journey #adventure (all related to trains/journeys)
 - The hashtags should help people discover content about the same topic as '{filename}'
 
 Flow to follow (do NOT label the sections, just write the caption):
@@ -211,7 +210,7 @@ Flow to follow (do NOT label the sections, just write the caption):
 - Descriptive story with context (what happened, who, where) plus emotional, relatable details - all based on '{filename}'
 - Engagement element with a question that invites replies
 - Call-to-action question at the end
-- Hashtags at the very end (MUST be 5-10 hashtags, ALL related to filename '{filename}' topic)
+- Hashtags last (5-10, topic-specific) (NO generics)
 
 Generate only the caption text (no section labels, no extra notes). Keep it under 1,800 characters total, clearly paragraph-separated, and fully tied to the filename '{filename}' topic. Remember: Hashtags MUST be generated based on the filename '{filename}'."""
             },
